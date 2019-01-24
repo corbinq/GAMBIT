@@ -1,0 +1,7 @@
+Coding	Protein_Altering	Nonsynonymous,Start_Loss,Stop_Gain,Stop_Loss,CodonGain,CodonLoss,Frameshift
+Coding	Splice_Site	Essential_Splice_Site,Normal_Splice_Site
+UTR3	UTR3	Utr3
+UTR5	UTR5	Utr5
+Exon	Exon	Exon,Synonymous,Insertion,Deletion
+Promoter	Promoter	promoter
+Proximal	Proximal	Upstream,Downstream
