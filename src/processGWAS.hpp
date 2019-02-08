@@ -70,7 +70,7 @@ class dparam
 		double p;
 		double tau;
 };
-typedef unordered_map<string, dparam> dparam_l;
+typedef tsl::hopscotch_map<string, dparam> dparam_l;
 
 class unitdata
 {
@@ -82,10 +82,10 @@ class unitdata
 		
 		bool omit_gene;
 	
-		unordered_map<string, snpdata> sstats;
-		unordered_map<string, double> pvals;
+		tsl::hopscotch_map<string, snpdata> sstats;
+		tsl::hopscotch_map<string, double> pvals;
 		
-		//unordered_map<string, snpdata> regel_sstats;
+		//tsl::hopscotch_map<string, snpdata> regel_sstats;
 		
 		double global_pval;
 		double Lform_MMVN_pval;
@@ -180,7 +180,7 @@ class tssdat
 class eweight
 {
 	public:
-		unordered_set<string> tissues;
+		tsl::hopscotch_set<string> tissues;
 		int k, m;
 		vector<string> chr;
 		vector<int> pos;
@@ -200,7 +200,7 @@ class eweight
 class gwasdata
 {
 	public:
-		unordered_map<string, unitdata> data;
+		tsl::hopscotch_map<string, unitdata> data;
 		
 		regel regel_data;
 		eweight eweight_data;
@@ -230,8 +230,8 @@ class annodef
 {
 	public:
 		bool nodef;
-		unordered_map<string, vector<string>> defs;
-		unordered_map<string, string> meta;
+		tsl::hopscotch_map<string, vector<string>> defs;
+		tsl::hopscotch_map<string, string> meta;
 		vector<string> & operator[](string a) {return defs[a];};
 		bool defn(string);
 		void push(string, string);

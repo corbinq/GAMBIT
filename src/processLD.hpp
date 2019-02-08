@@ -2,6 +2,8 @@
 #define PROCESSLD_HPP
 
 #include "tabix_util/tabix.hpp"
+#include "tsl/hopscotch_map.h"
+#include "tsl/hopscotch_set.h"
 
 #include <iostream>
 #include <sstream>
@@ -83,11 +85,19 @@ class ld_datum
 		int mac;
 		int nhaps;
 		int block;
+		int ld_count;
 		bool missing;
 		bool fetched;
 		ld_datum();
 		ld_datum(string&, int&, string&, string&);
 		void fetchGeno();
+};
+
+struct pair_int_hash
+{
+  size_t operator()(const pair<int,int>&x)const{
+    return hash<long long>()(((long long)x.first)^(((long long)x.second)<<32));
+  }
 };
 
 class ld_data
@@ -98,13 +108,16 @@ class ld_data
 		int ichr;
 		string schr;
 		vector<ld_datum> pos_data;
-		unordered_map<string, int> snp_index;
+		
+		tsl::hopscotch_map<pair<int,int>,double,pair_int_hash> ld_vals;
+		
+		tsl::hopscotch_map<string, int> snp_index;
 		ld_datum & operator [](int a) {return pos_data[a];};
 		ld_data(int);
 		void fetch(int&, string&, string&, int&);
 		// void push(string, vector<int>, vector<bool>, int, int, int, bool);
 		// void getGeno(int&, string&, string&);
-		double gcorr(int&, int&);
+		double gcorr(int, int);
 		void print_LD( vector<int>& );
 		Eigen::MatrixXd LD( vector<int>& );
 		int nmiss( vector<int>& );
@@ -153,6 +166,13 @@ class ldref
 };
 
 //extern ldref LDREF;
+
+void setJump (int);
+
+void setMemoizeLD(bool);
+void setPreload(bool);
+
+string gsubstr(string , string , string );
 
 vector<int> getRegion (string str);
 

@@ -19,12 +19,16 @@ void print_usage() {
 	cerr << "    variant filtering\n";
 	cerr << "      --ldref-only : only retain variants with complete LD information\n";
 	cerr << "      --tissues STR : only use eSNPs from tissues listed in file\n";
+	cerr << "    test statistics\n";
+	cerr << "      --acat : use ACAT rather than SKAT for regulatory elements & exons\n";
+	cerr << "      --tissues STR : only use eSNPs from tissues listed in file\n";
 	cerr << "    output\n";
 	cerr << "      --region STR : restrict analysis to specified region \n";
 	cerr << "      --stdout : print to stdout rather than file \n";
 	cerr << "      --prefix STR : prefix for output files \n";
 	//cerr << "      --merge-tissues : use global rather than tissue-specific eQTL weights \n";
 	cerr << "    other\n";
+	cerr << "      --no-memo : do not memoize LD (lower memory usage) \n";
 	cerr << "      --help : print this message and exit\n\n";
 }
 
@@ -58,6 +62,12 @@ int main (int argc, char *argv[]) {
 	int print_screen = 0;
 	int twas = 0;
 	
+	int no_memo_LD = 0;
+	int preload_LD = 0;
+	
+	string JUMP_DIST_STR = "";
+	int jump_dist = 500000;
+	
 	char default_test = 'Q'; // default is 'Q' (SKAT)
 	
 	int cauchy_no_skat = 0;
@@ -76,6 +86,8 @@ int main (int argc, char *argv[]) {
 	static struct option long_options[] = {
 		{"help",   no_argument,  &help,  1},
 		{"twas", no_argument, &twas, 1},
+		{"no-memo", no_argument, &no_memo_LD, 1},
+		{"preload", no_argument, &preload_LD, 1},
 		{"ldref",      required_argument,  0,  'l'},
 		{"gwas", required_argument, 0, 'g'},
 		{"anno-defs", required_argument, 0, 'a'},
@@ -85,6 +97,7 @@ int main (int argc, char *argv[]) {
 		{"tss-alpha", required_argument, 0, 'x'},
 		{"tss-window", required_argument, 0, 'y'},
 		{"tss-verbosity", required_argument, 0, 'e'},
+		{"jump-dist", required_argument, 0, 'j'},
 		{"tissues", required_argument, 0, 't'},
 		{"betas", required_argument, 0, 'b'},
 		{"merge-tissues", no_argument, &tmerge, 1},
@@ -95,19 +108,20 @@ int main (int argc, char *argv[]) {
 		{"region",    required_argument, 0,  'r' },
 		{"prefix", required_argument, 0, 'p'},
 		{"extra",    no_argument, &extra,  1},
-		{"region",    required_argument, 0,  'r'},
 		{"gene", required_argument, 0, 'v'},
 		{"ldref-only", no_argument, &exclude_missing, 1},
 		{0, 0, 0, 0}
 	};
 	int long_index =0;
-	while ((opt = getopt_long(argc,argv,"p:l:g:a:t:s:b:d:",long_options,&long_index)) != -1) {
+	while ((opt = getopt_long(argc,argv,"l:g:a:f:s:x:y:e:j:t:b:r:p:v:",long_options,&long_index)) != -1) {
 		switch (opt) {
 			case 'f' : afile = optarg;
 				break;
 			case 'p' : prefix = optarg;
 				break;
 			case 'l' : ldfile = optarg;
+				break;
+			case 'j' : JUMP_DIST_STR = optarg;
 				break;
 			case 'd' : target_gene = optarg;
 				break;
@@ -166,6 +180,9 @@ int main (int argc, char *argv[]) {
 		return 1;
 	}
 	else {
+		for(int i = 22; i>0; --i){
+			ldfile = gsubstr(ldfile, "chr" + to_string(i), "chr*");
+		}
 		setPath( ldfile );
 	}
 	if( debug_mode ) {
@@ -191,6 +208,22 @@ int main (int argc, char *argv[]) {
 		excludeMissing();
 	}
 
+	if( no_memo_LD > 0 ){
+		setMemoizeLD(false);
+	}else{
+		setMemoizeLD(true);
+	}
+	if( preload_LD > 0 ){
+		setPreload(true);
+	}else{
+		setPreload(false);
+	}
+	
+	if( JUMP_DIST_STR != "" ){
+		jump_dist = stoi(JUMP_DIST_STR);
+	}
+	setJump(jump_dist);
+	
 	if( print_screen ){
 		cerr.rdbuf(nullptr);
 	}
@@ -275,7 +308,7 @@ int main (int argc, char *argv[]) {
 				strat_out << "#CHR\tPOS\tGENE\tCLASS\tSUBCLASS\tNSNPS\tSTAT\tPVAL\tINFO\n";
 				
 				for(string& group : gwinfo[target_gene].groups) {
-					if( exclude_missing ) gwinfo.data[target_gene][group].pop_missing();
+					if( exclude_missing && default_test!='C'  ) gwinfo.data[target_gene][group].pop_missing();
 					gwinfo[target_gene].runTest(group,default_test);
 					nstats++;
 				}
@@ -314,10 +347,10 @@ int main (int argc, char *argv[]) {
 					int nelem = 0;
 					for(string& name : gwinfo.elements) {
 						for(string& group : gwinfo[name].groups) {
-							if( exclude_missing ) gwinfo.data[name][group].pop_missing();
+							if( exclude_missing && default_test!='C' ) gwinfo.data[name][group].pop_missing();
 							gwinfo.runTest(name,group,true,default_test);
 							nelem++;
-							if( nelem % 25 == 0 ) {
+							if( nelem % 5 == 0 ) {
 								cerr << "\rcalculated statistics for " << pretty(nelem) << " regulatory elements  ";
 							}
 						}
@@ -328,24 +361,23 @@ int main (int argc, char *argv[]) {
 				
 				
 				for(string& gene : gwinfo.genes ) {
-					// cout << "\nBEGIN GENE " << *gene << "\n";
+					//cout << "\nBEGIN GENE " << gene << "\n";
 					for(string& group : gwinfo[gene].groups) {
-						if( exclude_missing ) gwinfo.data[gene][group].pop_missing();
+						if( exclude_missing && default_test!='C' ) gwinfo.data[gene][group].pop_missing();
 						gwinfo.data[gene].runTest(group,default_test);
 						nstats++;
-						if( nstats % 25 == 0 ) {
-							cerr << "\rcalculated " << pretty(nstats) << " statistics for " << pretty(ngenes) << " genes  ";
-						}
+
 					}
 					for( string& tissue : gwinfo[gene].tissues ) {
 						if( exclude_missing ) gwinfo.data[gene][tissue].pop_missing();
 						gwinfo.data[gene].runTest(tissue,'L');
 						nstats++;
-						if( nstats % 25 == 0 ) {
-							cerr << "\rcalculated " << pretty(nstats) << " statistics for " << pretty(ngenes) << " genes  ";
-						}
+					}
+					if( ngenes % 2 == 0 ) {
+						cerr << "\rcalculated " << pretty(nstats) << " statistics for " << pretty(ngenes) << " genes  ";
 					}
 					gwinfo[gene].globalPval();
+					nstats++;
 					strat_out << gwinfo[gene].print_all_groups();
 					genes_out << gwinfo[gene].print_summary();
 					ngenes++;

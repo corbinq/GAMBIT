@@ -7,10 +7,30 @@ TabixList tfiles;
 string chr_global = "0";
 string vcf_path = "";
 
+int JUMP_DIST = 200000;
+
+string chr_pfx = "";
+bool checked_prefix = false;
+
+bool memoize_LD = true;
+bool PRELOAD_PANEL = false;
+
 unordered_map<string, int> iCHR;
 vector<string> sCHR;
 
 ldref LDREF;
+
+void setMemoizeLD(bool memLD){
+	memoize_LD = memLD;
+}
+
+void setPreload(bool pl){
+	PRELOAD_PANEL = pl;
+}
+
+void setJump(int jd){
+	JUMP_DIST = jd;
+}
 
 void initCHR() {
 	sCHR.resize(26);
@@ -39,6 +59,17 @@ void initCHR() {
 
 void setPath(string& path) {
 	vcf_path = path;
+}
+
+
+
+string gsubstr(string inp, string pat, string rep) {
+	std::string::size_type n = 0;
+	while ( ( n = inp.find( pat, n ) ) != std::string::npos ) {
+		inp.replace( n, pat.size(), rep );
+		n += rep.size();
+	}
+	return inp;
 }
 
 
@@ -96,19 +127,27 @@ int snpinfo::size() {
 
 
 void snpinfo::pop(vector<int>& rm){
-	for(vector<int>::iterator i = rm.begin(); i != rm.end(); ++i){
-		chr.erase(chr.begin() + *i);
-		pos.erase(pos.begin() + *i);
-		rsid.erase(rsid.begin() + *i);
-		ref.erase(ref.begin() + *i);
-		alt.erase(alt.begin() + *i);
-		ld_index.erase(ld_index.begin() + *i);
+	sort(rm.begin(), rm.end(), greater<int>());
+	for( const int& i : rm){
+		chr.erase(chr.begin() + i);
+		pos.erase(pos.begin() + i);
+		rsid.erase(rsid.begin() + i);
+		ref.erase(ref.begin() + i);
+		alt.erase(alt.begin() + i);
+		ld_index.erase(ld_index.begin() + i);
+	}
+	min_pos = 300000000;
+	max_pos = 0;
+	for( const int& p : pos ){
+		min_pos = min(min_pos, p);
+		max_pos = max(max_pos, p);
 	}
 }
 
 
 ld_datum::ld_datum() {
 	dir = 0;
+	ld_count = 0;
 	missing = true;
 	fetched = false;
 }
@@ -116,6 +155,7 @@ ld_datum::ld_datum() {
 
 ld_datum::ld_datum(string& ch, int& po, string& re, string& al) {
 	dir = 0;
+	ld_count = 1;
 	missing = true;
 	fetched = false;
 	chr = ch;
@@ -138,54 +178,82 @@ void ld_data::fetch(int& pos, string& ref, string& alt, int& index) {
 		string key = to_string(pos) + ":" + ref + ":" + alt;
 		if( snp_index.find(key) == snp_index.end() ) {
 			ld_datum tmp(schr, pos, ref, alt);
-			//tmp.fetchGeno();
+			if( PRELOAD_PANEL ){
+				tmp.fetchGeno();
+			}
 			pos_data.push_back(tmp);
+			
 			snp_index[key] = nsnps;
+			index = nsnps;
+			
 			nsnps++;
+		}else{
+			index = snp_index[key];
+			pos_data[index].ld_count++;
 		}
-		index = snp_index[key];
 	}
 }
 
-double ld_data::gcorr(int& i, int& j) {
+double ld_data::gcorr(int i, int j) {
 	if(i == j) {
 		return 1;
+	}else if(i > j){
+		swap(i,j);
 	}
-	if( !pos_data[i].fetched ){
-		pos_data[i].fetchGeno();
+	ld_datum& pd_i = pos_data[i];
+	ld_datum& pd_j = pos_data[j];
+	if( memoize_LD ){
+		if( pd_i.ld_count > 1 && pd_j.ld_count > 1 ){
+			
+			if( ld_vals.find(pair<int,int>(i,j)) != ld_vals.end() ){
+				
+				double& Rv = ld_vals[pair<int,int>(i,j)];
+				
+				if( abs(Rv) > 1 ){
+					cout << "LD val = " << Rv << "\n\n";
+					cout << " i = " << i << " , j = " << j << "\n\n";
+					abort();
+				}
+				return Rv;
+				
+			}
+		}
 	}
-	if( !pos_data[j].fetched ){
-		pos_data[j].fetchGeno();
+	if( !pd_i.fetched ){
+		pd_i.fetchGeno();
 	}
-	if(pos_data[i].dir == 0.0 || pos_data[j].dir == 0.0 ) {
+	if( !pd_j.fetched ){
+		pd_j.fetchGeno();
+	}
+	if(pd_i.dir == 0.0 || pd_j.dir == 0.0 ) {
 		return 0;
 	}
-	if( pos_data[i].nhaps != pos_data[j].nhaps ){
-		cerr << "WARNING: " << schr << ":" << pos_data[i].pos << " has n=" << pos_data[i].nhaps << ", while " << schr << ":" << pos_data[j].pos << " has n=" << pos_data[j].nhaps << "...\n";
+	if( pd_i.nhaps != pd_j.nhaps ){
+		cerr << "WARNING: " << schr << ":" << pd_i.pos << " has n=" << pd_i.nhaps << ", while " << schr << ":" << pd_j.pos << " has n=" << pd_j.nhaps << "...\n";
 		return 0;
-	}else if( nhaps != pos_data[i].nhaps){
-		nhaps = pos_data[i].nhaps;
+	}else if( nhaps != pd_i.nhaps){
+		nhaps = pd_i.nhaps;
 	}
-	if(min(pos_data[i].mac,pos_data[j].mac)==0.0 || max(pos_data[i].mac,pos_data[j].mac)==nhaps) {
+	if(min(pd_i.mac,pd_j.mac)==0.0 || max(pd_i.mac,pd_j.mac)==nhaps) {
 		return 0;
 	}
 
-	double EG_i = (double) pos_data[i].mac/ (double) nhaps;
-	double EG_j = (double) pos_data[j].mac/ (double) nhaps;
+	double EG_i = (double) pd_i.mac/ (double) nhaps;
+	double EG_j = (double) pd_j.mac/ (double) nhaps;
 	double EGij;
 
 	if( EG_i < EG_j ) {
-		EGij = sizeIS(pos_data[i].carriers, pos_data[i].mac, pos_data[j].genotypes, nhaps);
+		EGij = sizeIS(pd_i.carriers, pd_i.mac, pd_j.genotypes, nhaps);
 	}
 	else {
-		EGij = sizeIS(pos_data[j].carriers, pos_data[j].mac, pos_data[i].genotypes, nhaps);
+		EGij = sizeIS(pd_j.carriers, pd_j.mac, pd_i.genotypes, nhaps);
 	}
 
 	double SD_i = sqrt(EG_i)*sqrt(1.0 - EG_i);
 	double SD_j = sqrt(EG_j)*sqrt(1.0 - EG_j);
 	double C_ij = EGij - EG_i*EG_j;
 
-	double D = pos_data[i].dir * pos_data[j].dir * C_ij;
+	double D = pd_i.dir * pd_j.dir * C_ij;
 	double R;
 
 	if( SD_i * SD_j > 0.0 ) {
@@ -194,6 +262,13 @@ double ld_data::gcorr(int& i, int& j) {
 	if( abs(R) > 1.0 ) {
 		R = (R > 0) ? 1.0 : -1.0;
 	}
+	
+	if( memoize_LD ){
+		if( pd_i.ld_count > 1 && pd_j.ld_count > 1 ){
+			ld_vals[pair<int,int>(i,j)] = R;
+		}
+	}
+	
 	return R;
 }
 
@@ -202,13 +277,13 @@ double ldref::gcorr(string& ch, int& i, int& j) {
 }
 
 void ld_data::print_LD(vector<int>& idx) {
-	for(vector<int>::iterator i = idx.begin(); i != idx.end(); ++i) {
-		for(vector<int>::iterator j = idx.begin(); j != idx.end(); ++j) {
-			if(*i == *j) {
+	for( const int& i : idx ) {
+		for( const int& j : idx ) {
+			if(i == j) {
 				cout << "1.000" << "\t";
 			}
 			else {
-				cout << gcorr(*i, *j) << "\t";
+				cout << gcorr(i, j) << "\t";
 			}
 		}
 		cout << "\n";
@@ -364,13 +439,24 @@ vector<int> getRegion (string str) {
 
 
 string asRegion (string chr, int pos, int end) {
-	string out = chr + ":" + to_string(pos) + "-" + to_string(end);
+	string out = chr_pfx + gsubstr(chr, "chr", "") + ":" + to_string(pos) + "-" + to_string(end);
 	return out;
 }
 
 
 string asRegion (int chr, int pos, int end) {
-	string out = to_string(chr) + ":" + to_string(pos) + "-" + to_string(end);
+	string out = chr_pfx + to_string(chr) + ":" + to_string(pos) + "-" + to_string(end);
+	return out;
+}
+
+string asRegion (string chr, int pos) {
+	string out = chr_pfx + gsubstr(chr, "chr", "") + ":" + to_string(pos);
+	return out;
+}
+
+
+string asRegion (int chr, int pos) {
+	string out = chr_pfx + to_string(chr) + ":" + to_string(pos);
 	return out;
 }
 
@@ -421,29 +507,34 @@ void checkup() {
 }
 
 
-string gsubstr(string inp, string pat, string rep) {
-	std::string::size_type n = 0;
-	while ( ( n = inp.find( pat, n ) ) != std::string::npos ) {
-		inp.replace( n, pat.size(), rep );
-		n += rep.size();
-	}
-	return inp;
-}
-
-
 string subchr (string inp, string chr) {
+	chr = gsubstr(chr, "chr", "");
 	if( inp.find("*") != string::npos ) {
 		return gsubstr ( inp,  "*", chr);
-	}
-	if( inp.find("$chr") != string::npos ) {
+	}else if( inp.find("$chr") != string::npos ) {
 		return gsubstr ( inp,  "$chr", chr);
-	}
-	if( inp.find("$") != string::npos ) {
+	}else if( inp.find("$") != string::npos ) {
 		return gsubstr ( inp,  "$", chr);
 	}
 	return inp;
 }
 
+void addGeno(char x, vector<bool>& geno, vector<int>& carr, int& n){
+	switch (x){
+		case '1' : 
+			geno.push_back(1);
+			carr.push_back(n);
+			n++;
+			break;
+		case '0' : 
+			geno.push_back(0);
+			n++;
+			break;
+		default : 
+			cerr << "FATAL ERROR: Complete, phased genotypes required in LD reference panel \n\n";
+			abort();
+	}
+}
 
 void ld_datum::fetchGeno() {
 	if( fetched ){
@@ -457,73 +548,113 @@ void ld_datum::fetchGeno() {
 		if( stat (chr_path.c_str(), &buffer) == 0 ) {
 			tfiles.ts[cdx].open( chr_path );
 			tfiles.opened[cdx] = true;
+			
+			if( !checked_prefix ){
+				string line; 
+				while ( tfiles.ts[cdx].getNextLine(line) && !checked_prefix ){
+					if( line[0] != '#' && line.length() > 0 ) {
+							if( line.substr(0,3) == "chr" ){
+								chr_pfx = "chr";
+							}
+							checked_prefix = true;
+					}
+				}
+			}
+			
 		}
 		else {
-			cerr << "\nWARNING: " << vcf_path << " does not exist ... !\n";
-			missing = true;
-			fetched = true;
-			return;
+			cerr << "\nFATAL ERROR: " << vcf_path << " does not exist ... !\n";
+			abort();
+			// missing = true;
+			// fetched = true;
+			// return;
 		}
 	}
+	
+	bool passed = false;
+	bool jumped = false;
+	bool contin = true;
+	
 	missing = true;
 	fetched = true;
-	string region = asRegion( chr, pos, pos );
-	tfiles.ts[cdx].setRegion( region );
+	string region = asRegion( chr, pos );
+	
+	// cout << region << "\n";
 	string line;
-	while ( tfiles.ts[cdx].getNextLine(line) && missing ) {
+	while ( tfiles.ts[cdx].getNextLine(line) && contin ) {
 		if( line[0] != '#' && line.length() > 0 ) {
 			string ichr, iref, ialt, rsid, qual, filter, info, format, gts;
 			int ipos;
 			istringstream iss(line);
 			iss >> ichr >> ipos >> rsid >> iref >> ialt >> qual >> filter >> info >> format;
+			
+			if( format.substr(0,2) != "GT" ){
+				cerr << "\nFATAL ERROR: GT field is required for all variants in LD reference files\n\n";
+				abort();
+			}
+			// cout << ichr << ":" << ipos << "\n";
 			if( ipos == pos && iCHR[ichr] == iCHR[chr] ) {
 				dir = allele_check(ref, alt, iref, ialt);
 				if( abs(dir) > 0 ) {
 					missing = false;
+					contin = false;
 
 					// if(DEBUG) cout << "SUCCESS\n";
-
-					string ac, an;
-					size_t pos_t = info.find(";");
-					ac = info.substr(0, pos_t);
-					an = info.substr(pos_t +1);
-					//if( DEBUG ) cout << " : " << ac << "\t" << an << ":";
-					//if( DEBUG ) cout << " : " << ac.substr(ac.find("=")+1) << "\t" << an.substr(an.find("=")+1) << " : ";
-					mac = stoi(ac.substr(ac.find("=")+1));
-					nhaps = stoi(an.substr(an.find("=")+1));
-
-					char G1 = '1';
-					int sofar = 0;
-					int n = 0;
-					
-					if( mac > 0.5*nhaps ) {
-						G1 = '0';
-						dir *= -1;
-						mac = nhaps - mac;
+					nhaps = 0;
+					mac = 0;
+					while( iss >> gts ) {
+						if( gts[1] != '|' ){
+							cerr << "FATAL ERROR: phased genotypes required in LD reference panel\n\n";
+							abort();
+						}
+						addGeno(gts[0], genotypes, carriers, nhaps);
+						addGeno(gts[2], genotypes, carriers, nhaps);
 					}
+					mac = carriers.size();
 					
-					// if(DEBUG) cout << "\n" << nhaps << "\t" << datum.mac;
-					
-					carriers.resize(mac);
-					genotypes.resize(nhaps);
-
-					string geno;
-					while( iss >> geno ) {
-						for (int idx = 0; idx < min(3, (int) geno.length()); idx += 2) {
-							if( geno[idx] == G1 ) {
-								genotypes[n] = 1;
-								carriers[sofar] = n;
-								sofar++;
+					if( mac > 0.5*nhaps ){
+						mac = nhaps - mac;
+						dir *= (-1);
+						genotypes.flip();
+						carriers.clear();
+						int i = 0;
+						for( const bool gt : genotypes ){
+							if(gt){
+								carriers.push_back(i);
 							}
-							n++;
+							i++;
 						}
 					}
-					// if( DEBUG ) cout << "\t" << sofar << "\n";
+					// cout << chr << ":" << pos << ", N = " << nhaps << ", MAC = " << mac << "\n";
+					// for( int j: carriers ){
+					//	cout << j << ",";
+					// }
+					// cout << "\n";
 
 				}
 				//else if( DEBUG ) {
 					// cout << "FAILED:" << ref << ":" << alt << "\n";
 				//}
+			}else{
+				if( ipos < pos ){
+					if( !jumped && pos - ipos >= JUMP_DIST ){
+						tfiles.ts[cdx].setRegion( region );
+						jumped = true;
+					}
+				}else{
+					if( !passed ){
+						passed = true;
+						if( !jumped ){
+							tfiles.ts[cdx].setRegion( region );
+							jumped = true;
+						}else{
+							contin = false;
+						}
+					}else{
+						contin = false;
+					}
+				}
+				
 			}
 			//else if(DEBUG) {
 				// cout << "FAILED:" << pos << "\n";

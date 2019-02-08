@@ -33,6 +33,7 @@ bool DEBUG = false;
 bool NOMISS = false;
 
 bool ENH_CAUCHY = true;
+bool GLOBAL_CAUCHY = true;
 
 bool PRINT_ALL_REGEL_GENES = true;
 
@@ -43,6 +44,10 @@ map<string, set<string>> gene_sets;
 int JUMP = 100000;
 
 annodef ANNO_DEFS;
+
+void globalCauchy(bool gc){
+	GLOBAL_CAUCHY = gc;
+}
 
 void setDistNZ(){
 	MIN_NZ_QT = 1 - pchisq(MIN_NZ_Z*MIN_NZ_Z, 1);
@@ -236,13 +241,46 @@ bool read_snp_info(string &file_path, snpinfo &sinfo) {
 
 
 void snpdata::pop(vector<int>& rm){
-	info.pop(rm);
 	// Note: rm elements are in reverse order
-	for(int& i : rm){
-		n.erase(n.begin() + i);
-		z.erase(z.begin() + i);
-		w.erase(w.begin() + i);
+	if( rm.size() >= z.size() ){
+		int i_max = 0;
+		for(int i = 0; i < z.size(); i++){
+			if( abs(w[i]) >= abs(w[i_max]) ){
+				i_max = i;
+			}
+		}
+		double n_im = n[i_max];
+		double z_im = z[i_max];
+		double w_im = w[i_max];
+		
+		n.clear();
+		z.clear();
+		w.clear();
+		
+		n.push_back(n_im);
+		z.push_back(z_im);
+		w.push_back(w_im);
+		
+		rm.clear();
+		
+		for(int i = z.size() -1; i >= 0; i--){
+			if( i != i_max){
+				rm.push_back(i);
+			}
+		}
+		
+		nvar_total = 1;
+		nvar = 1;
+	}else{
+		for(int& i : rm){
+			n.erase(n.begin() + i);
+			z.erase(z.begin() + i);
+			w.erase(w.begin() + i);
+		}
+		nvar_total = z.size();
+		nvar = z.size();
 	}
+	info.pop(rm);
 }
 
 
@@ -1764,10 +1802,17 @@ void unitdata::globalPval(){
 				}
 				min_pval = sstats[ts].pval;
 			}
+			if( GLOBAL_CAUCHY ){
+				pval_vec.push_back(sstats[ts].pval);
+				global_pval = min(global_pval, sstats[ts].pval);
+				n_uniq_tests++;
+			}else{
+				Lform_groups.push_back(ts);
+			}
+
 			n_total_tests++;
 		}
 	}
-	Lform_groups = tissues;
 	if( groups.size() > 0 ){
 		for( const string& x : groups ){
 			if( sstats[x].pval <= min_pval ){
@@ -1784,11 +1829,11 @@ void unitdata::globalPval(){
 				}
 				min_pval = sstats[x].pval;
 			}
-			if( sstats[x].z.size() > 1 ){
+			if( sstats[x].z.size() > 1  ||  ( sstats[x].z.size()==1 && GLOBAL_CAUCHY)  ){
 				pval_vec.push_back(sstats[x].pval);
 				global_pval = min(global_pval, sstats[x].pval);
 				n_uniq_tests++;
-			}else if( sstats[x].z.size() == 1 ){
+			}else if( sstats[x].z.size() == 1 && !GLOBAL_CAUCHY ){
 				Lform_groups.push_back(x);
 			}
 			n_total_tests++;
@@ -1813,11 +1858,11 @@ void unitdata::globalPval(){
 					}
 					min_pval = sstats[x].pval;
 				}
-				if( sstats[x].z.size() > 1 ){
+				if( sstats[x].z.size() > 1  ||  ( sstats[x].z.size()==1 && GLOBAL_CAUCHY)  ){
 					pval_vec.push_back(sstats[x].pval);
 					global_pval = min(global_pval, sstats[x].pval);
 					n_uniq_tests++;
-				}else if( sstats[x].z.size() == 1 ){
+				}else if( sstats[x].z.size() == 1 && !GLOBAL_CAUCHY ){
 					Lform_groups.push_back(x);
 				}
 			}
@@ -2085,7 +2130,6 @@ double gwasdata::EM_round(int iteration) {
 	omega = omega_new;
 	return delta;
 }
-
 
 
 

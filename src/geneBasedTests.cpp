@@ -25,17 +25,18 @@ double cauchy_minP(vector<double>& pvals){
 	}
 	double pval_out = 1-pcauchy( stat/pvals.size() );
 	
-	if( pval_out <= 0.00 ){
-		cerr << "CAUCHY TEST FAILURE: STAT = " << stat << ", PVAL = " << pval_out << ", MIN SVAR PVAL = " << pval_min << " \n";
-		for (double& p : pvals){
-			cerr << p << ", ";
-		}
-		cerr << "\n\n";
-	}
+	//if( pval_out <= 0.00 ){
+		//cerr << "CAUCHY TEST FAILURE: STAT = " << stat << ", PVAL = " << pval_out << ", MIN SVAR PVAL = " << pval_min << " \n";
+		//for (double& p : pvals){
+		//	cerr << p << ", ";
+		//}
+		//cerr << "\n\n";
+	//}
 	
 	if ( pval_out < pval_min ){
+		double n_unique = set<double>( pvals.begin(), pvals.end() ).size();
 		//cerr << "CAUCHY TEST FAILURE: PVAL = " << pval_out << ", MIN SVAR PVAL = " << pval_min << " \n\n";
-		return min(1.00, pvals.size()*pval_min);
+		return min(1.00, n_unique*pval_min);
 	}else{
 		return pval_out;
 	}
