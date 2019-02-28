@@ -9,6 +9,8 @@ string vcf_path = "";
 
 int JUMP_DIST = 200000;
 
+int ld_panel_size = 0;
+
 string chr_pfx = "";
 bool checked_prefix = false;
 
@@ -519,7 +521,7 @@ string subchr (string inp, string chr) {
 	return inp;
 }
 
-void addGeno(char x, vector<bool>& geno, vector<int>& carr, int& n){
+void addGeno(char& x, vector<bool>& geno, vector<int>& carr, int& n){
 	switch (x){
 		case '1' : 
 			geno.push_back(1);
@@ -528,6 +530,22 @@ void addGeno(char x, vector<bool>& geno, vector<int>& carr, int& n){
 			break;
 		case '0' : 
 			geno.push_back(0);
+			n++;
+			break;
+		default : 
+			cerr << "FATAL ERROR: Complete, phased genotypes required in LD reference panel \n\n";
+			abort();
+	}
+}
+
+void setGeno(char& x, vector<bool>& geno, vector<int>& carr, int& n){
+	switch (x){
+		case '1' : 
+			geno[n] = 1;
+			carr.push_back(n);
+			n++;
+			break;
+		case '0' :
 			n++;
 			break;
 		default : 
@@ -600,17 +618,43 @@ void ld_datum::fetchGeno() {
 					contin = false;
 
 					// if(DEBUG) cout << "SUCCESS\n";
-					nhaps = 0;
+					
 					mac = 0;
-					while( iss >> gts ) {
-						if( gts[1] != '|' ){
-							cerr << "FATAL ERROR: phased genotypes required in LD reference panel\n\n";
-							abort();
+					nhaps = 0;
+					
+					if( ld_panel_size == 0 ){
+						
+						while( iss >> gts ) {
+							if( gts[1] != '|' ){
+								cerr << "FATAL ERROR: phased genotypes required in LD reference panel\n\n";
+								abort();
+							}
+							addGeno(gts[0], genotypes, carriers, nhaps);
+							addGeno(gts[2], genotypes, carriers, nhaps);
 						}
-						addGeno(gts[0], genotypes, carriers, nhaps);
-						addGeno(gts[2], genotypes, carriers, nhaps);
+						mac = carriers.size();
+						
+						ld_panel_size = nhaps;
+					}else{
+						
+						genotypes.resize(ld_panel_size, 0);
+						while( iss >> gts ) {
+							if( gts[1] != '|' ){
+								cerr << "FATAL ERROR: phased genotypes required in LD reference panel\n\n";
+								abort();
+							}
+							setGeno(gts[0], genotypes, carriers, nhaps);
+							setGeno(gts[2], genotypes, carriers, nhaps);
+						}
+						if( nhaps != ld_panel_size ){
+								cerr << "FATAL ERROR: inconsistent sample size in LD reference data\n\n";
+								abort();
+						}
+						
+						mac = carriers.size();
+						
 					}
-					mac = carriers.size();
+					
 					
 					if( mac > 0.5*nhaps ){
 						mac = nhaps - mac;

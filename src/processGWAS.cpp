@@ -16,6 +16,13 @@ double p_lower = 1e-4;
 double p_upper = 1;
 double epsilon = 0.000000000001;
 
+int MULTIBURDEN_TYPE = 0;
+// 0 => ACAT 
+// 1 => min-p-value MVN
+// 2 => SKAT
+// 3 => ALL TESTS
+
+
 int N_Z_ZERO = 0;
 
 double MIN_NZ_Z = 1;
@@ -33,7 +40,7 @@ bool DEBUG = false;
 bool NOMISS = false;
 
 bool ENH_CAUCHY = true;
-bool GLOBAL_CAUCHY = true;
+bool GLOBAL_CAUCHY = false;
 
 bool PRINT_ALL_REGEL_GENES = true;
 
@@ -47,6 +54,24 @@ annodef ANNO_DEFS;
 
 void globalCauchy(bool gc){
 	GLOBAL_CAUCHY = gc;
+}
+
+
+void setMultiForm(string test_type){
+	transform(test_type.begin(), test_type.end(), test_type.begin(), ::tolower);
+	if( test_type == "0" || test_type == "acat" ){
+		MULTIBURDEN_TYPE = 0;
+	}else if( test_type == "1" || test_type == "minp" ){
+		MULTIBURDEN_TYPE = 1;
+	}else if( test_type == "2" || test_type == "q-form" || test_type == "skat" ){
+		MULTIBURDEN_TYPE = 2;
+	}else if( test_type == "3" || test_type == "all" ){
+		MULTIBURDEN_TYPE = 3;
+	}else{
+		cerr << "\nFATAL ERROR: valid --multi-test args are \"ACAT\" (default), \"MinP\", \"Q-form\", or \"All\" \n\n";
+		abort();
+	}
+	//return MULTIBURDEN_TYPE;
 }
 
 void setDistNZ(){
@@ -193,7 +218,7 @@ void pruneLD(Eigen::MatrixXd& cmat, double thres = 1){
 			for( int j = i+1; j < m; j++ ){
 				if( abs(cmat(i,j)) >= thres ){
 					pruneCovar(cmat, j);
-					pruneLD(cmat);
+					pruneLD(cmat, thres);
 					return;
 				}
 			}
@@ -213,7 +238,7 @@ void pruneLD(Eigen::MatrixXd& cmat, vector<double>& x, double thres = 1){
 				if( abs(cmat(i,j)) >= thres ){
 					x.erase( x.begin() + j );
 					pruneCovar(cmat, j);
-					pruneLD(cmat, x);
+					pruneLD(cmat, x, thres);
 					return;
 				}
 			}
@@ -239,6 +264,40 @@ bool read_snp_info(string &file_path, snpinfo &sinfo) {
 	return false;
 }
 
+
+chrom_index::chrom_index(){
+	start.resize(30, -1);
+	end.resize(30, 3000000000);
+}
+
+void chrom_index::init(){
+	start.resize(30, -1);
+	end.resize(30, 3000000000);
+}
+
+void chrom_index::update(string& chr, int val){
+	int i = iCHR[chr];
+	// cerr << chr << "\t" << i << "\t" << val << "\t" << start.size() << "\t" << end.size() << "\n";
+	if( start[i] < 0 ){
+		start[i] = val;
+		end[i] = val;
+	}else{
+		if( start[i] > val ){
+			start[i] = val;
+		}
+		if( end[i] < val ){
+			end[i] = val;
+		}
+	}
+}
+
+int chrom_index::startIndex(string& chr){
+	return start[iCHR[chr]];
+}
+
+int chrom_index::endIndex(string& chr){
+	return end[iCHR[chr]];
+}
 
 void snpdata::pop(vector<int>& rm){
 	// Note: rm elements are in reverse order
@@ -319,27 +378,19 @@ bool gwasdata::cross_tss(string& chr_i, int& pos_i, string& ref_i, string& alt_i
 	
 	bool out = false;
 	bool contin = true;
-	//if( iCHR[chr_i] != iCHR[chr[k_s]] ){
-	//		cerr << chr_i << "\t" << pos_i << "\n";
-	//		cerr << chr[k_s] << "\t" << start[k_s] << "\t" << end[k_s] << "\n";
-	//}
-	while( iCHR[chr_i] != iCHR[chr[k_s]] && contin ) {
-		if( iCHR[chr_i] > iCHR[chr[k_s]] ) {
-			if( k_s < m - 1 ) {
-				k_s++;
-			}else {
-				contin = false;
-			}
+	
+	int chr_k_s = tss_data.chr_idx.startIndex(chr_i);
+	int k_max = tss_data.chr_idx.endIndex(chr_i);
+	
+	if( iCHR[chr_i] != iCHR[chr[k_s]] ){
+		//	cerr << chr_i << "\t" << pos_i << "\n";
+		//	cerr << chr[k_s] << "\t" << start[k_s] << "\t" << end[k_s] << "\n";
+		if( chr_k_s > 0 ){
+			k_s = chr_k_s;
+			k_e = k_s;
+		}else{
+			return false;
 		}
-		if( iCHR[chr_i] < iCHR[chr[k_s]] ) {
-			//if( k > 0 ) {
-			//	k--;
-			//}
-			//else {
-				contin = false;
-			//}
-		}
-		k_e = k_s;
 	}
 	
 	int k = k_s;
@@ -382,6 +433,8 @@ void tssdat::readTSS(string& file_path, string region) {
 	Tabix tmp(file_path);
 	tmp.setRegion(region);
 	
+	chr_idx.init();
+	
 	int istart, iend;
 	string line, ichr, igene;
 	while( tmp.getNextLine(line) ) {
@@ -393,6 +446,8 @@ void tssdat::readTSS(string& file_path, string region) {
 			start.push_back(istart);
 			end.push_back(iend);
 			genes.push_back(igene);
+			
+			chr_idx.update(ichr,m);
 
 			m++;
 			if( m % 500 == 0 ) {
@@ -423,27 +478,31 @@ bool gwasdata::cross_regel(string& chr_i, int& pos_i, string& ref_i, string& alt
 	int& k = regel_data.k;
 	int& m = regel_data.m;
 	
-	bool out = false;
-	bool contin = true;
-	while( iCHR[chr_i] != iCHR[chr[k]] && contin ) {
-		if( iCHR[chr_i] > iCHR[chr[k]] ) {
-			if( k < m - 1 ) {
-				k++;
-			}
-			else {
-				contin = false;
-			}
+	int k_min = regel_data.chr_idx.startIndex(chr_i);
+	
+	if( iCHR[chr_i] != iCHR[chr[k]] ) {
+		
+		if( k_min < 0 ){
+			return false;
+		}else{
+			k = k_min;
 		}
-		if( iCHR[chr_i] < iCHR[chr[k]] ) {
-			//if( k > 0 ) {
-			//	k--;
-			//}
-			//else {
-				contin = false;
-			//}
-		}
+	}else{
+		
+		k = max(k_min, k - 2);
+		
 	}
-	while( iCHR[chr_i] == iCHR[chr[k]] && contin ) {
+	
+	int k_max = regel_data.chr_idx.endIndex(chr[k]);
+	
+	if( pos_i < start[k] ){
+		return false;
+	}
+	
+	bool out = false; 
+	bool contin = true;
+	
+	while( k <= k_max && contin ) {
 		if( pos_i >= start[k] && pos_i <= end[k] ) {
 			out = true;
 			
@@ -457,23 +516,10 @@ bool gwasdata::cross_regel(string& chr_i, int& pos_i, string& ref_i, string& alt
 				pushElement(names[k], elid[k], chr_i, pos_i, ref_i, alt_i, rsid_i, n, z, index);
 			//}
 			
-			if( k < m - 1 ) {
+			if( k <= k_max ) {
 				int j = k;
-				while( j < m - 1 && iCHR[chr_i] == iCHR[chr[j]] && start[j] <= pos_i ) {
+				while( j <= k_max && start[j] <= pos_i ) {
 					j++;
-					if( pos_i >= start[j] && pos_i <= end[j] ) {
-						//if( ENH_CAUCHY ){
-			
-						//}else{
-							pushElement(names[j], elid[j], chr_i, pos_i, ref_i, alt_i, rsid_i, n, z, index);
-						//}
-					}
-				}
-			}
-			if( k > 0 ) {
-				int j = k;
-				while( j > 0 && iCHR[chr_i] == iCHR[chr[j]] && end[j] >= pos_i ) {
-					j--;
 					if( pos_i >= start[j] && pos_i <= end[j] ) {
 						//if( ENH_CAUCHY ){
 			
@@ -486,14 +532,8 @@ bool gwasdata::cross_regel(string& chr_i, int& pos_i, string& ref_i, string& alt
 			contin = false;
 		}
 		else if( pos_i > end[k] ) {
-			if( k < m - 1 ) {
-				k++;
-			}
-			else {
-				contin = false;
-			}
-		}
-		else if( pos_i < start[k] ) {
+			k++;
+		}else if( pos_i < start[k] ) {
 			contin = false;
 		}
 	}
@@ -506,6 +546,8 @@ void regel::readElements(string& file_path, string region) {
 	m = 0;
 	Tabix tmp(file_path);
 	tmp.setRegion(region);
+	
+	chr_idx.init();
 	
 	bool map_mode = false;
 	map<string, string> tissue_map;
@@ -563,6 +605,9 @@ void regel::readElements(string& file_path, string region) {
 			}
 			group_maps[ielid] = group_map;
 			
+			
+			chr_idx.update(ichr,m);
+			
 			chr.push_back(ichr);
 			start.push_back(istart);
 			end.push_back(iend);
@@ -595,13 +640,26 @@ bool gwasdata::cross_eweight(string& chr_i, int& pos_i, string& ref_i, string& a
 	int& k = eweight_data.k;
 	int& m = eweight_data.m;
 	
-	bool out = false;
 	bool contin = true;
-	while( iCHR[chr_i] > iCHR[chr[k]] && k < chr.size()-1 ) {
-		k++;
+	if( iCHR[chr_i] != iCHR[chr[k]] ) {
+		int k_chr = eweight_data.chr_idx.startIndex(chr_i);
+		if( k_chr < 0 ){
+			return false;
+		}else{
+			k = k_chr;
+		}
 	}
-	while( iCHR[chr_i] >= iCHR[chr[k]] && pos_i >= pos[k] && contin ) {
-		if( iCHR[chr_i] >= iCHR[chr[k]] && pos_i == pos[k] ) {
+	
+	int k_max = eweight_data.chr_idx.endIndex(chr[k]);
+	
+	if( pos_i < pos[k] ){
+		return false;
+	}
+	
+	while( k <= k_max ) {
+		if( pos_i > pos[k] ){
+			k++;
+		}else if ( pos_i == pos[k] ) {
 			int dir = allele_check(ref_i, alt_i, eweight_data.ref[k], eweight_data.alt[k]);
 			if( abs(dir) > 0.0 ) {
 				for( int j=0; j < gene[k].size(); j++) {
@@ -609,23 +667,23 @@ bool gwasdata::cross_eweight(string& chr_i, int& pos_i, string& ref_i, string& a
 					push(gene[k][j], eweight_data.tissue[k][j], chr_i, pos_i, ref_i, alt_i, rsid_i, n, z, dbeta, index, true);
 					all_genes.insert(gene[k][j]);
 				}
-				out = true;
+				return true;
+			}else{
+				k++;
 			}
-		}
-		if( k < chr.size()-1 ) {
-			k++;
-		}
-		else {
-			contin = false;
+		}else{
+			return false;
 		}
 	}
-	return out;
+	return false;
 }
 
 
 void eweight::readBetas(string& file_path, string region, int tmerge) {
 	k = 0;
 	m = 0;
+	
+	chr_idx.init();
 	
 	map<string, string> tissue_map;
 	bool map_mode = false;
@@ -687,6 +745,9 @@ void eweight::readBetas(string& file_path, string region, int tmerge) {
 					ibetas.push_back(tbeta/((double) nt));
 				}
 			}
+			
+			chr_idx.update(ichr,m);
+			
 			chr.push_back(ichr);
 			pos.push_back(ipos);
 			ref.push_back(iref);
@@ -707,6 +768,8 @@ void eweight::readBetas(string& file_path, string region, int tmerge) {
 void eweight::readBetas(string& file_path, string region, string tlist_path, int tmerge) {
 	string line, tis;
 	int nt = 0;
+	
+	chr_idx.init();
 	
 	map<string, string> tissue_map;
 	bool map_mode = false;
@@ -788,6 +851,9 @@ void eweight::readBetas(string& file_path, string region, string tlist_path, int
 				}
 			}
 			if( retain ) {
+				
+				chr_idx.update(ichr,m);
+				
 				chr.push_back(ichr);
 				pos.push_back(ipos);
 				ref.push_back(iref);
@@ -889,6 +955,7 @@ bool read_defs(string &file_path, annodef &adef) {
 	string line;
 	if( file_path == "" ){
 		adef.nodef = true;
+		ANNO_DEFS = adef;
 		return true;
 	}
 	adef.nodef = false;
@@ -947,6 +1014,29 @@ void printProgress(int& nsnps, int& neqtl, int& nrege, int ngene, bool& use_esnp
 	}
 }
 
+void getRegions( vector<string>& regions, vector<string>& f_chr, vector<int>& f_start, vector<int>& f_end ){
+	string chr_s = f_chr[0];
+	int pos_s = f_start[0];
+	int pos_e = f_end[0];
+	for( int i = 1; i < f_chr.size(); i++ ){
+		if( f_start[i] - pos_e > JUMP || f_chr[i] != chr_s ){
+			string region = chr_s + ":" + 
+				to_string( 
+					(pos_s > 1) ? pos_s-1 : 0
+				) + "-" + 
+				to_string(pos_e+1);
+			regions.push_back(region);
+			chr_s = f_chr[i];
+			pos_s = f_start[i];
+			pos_e = f_end[i];
+		}else{
+			pos_e = f_end[i];
+		}
+	}
+	regions.push_back( chr_s + ":" + to_string(pos_s-1) + "-" + to_string(pos_e+1) );
+}
+
+
 bool read_gwas(string& zpath, string& region, gwasdata &gwas, annodef &adef, int &fetch_mode) {
 	string line;
 	zfile.open(zpath);
@@ -964,27 +1054,28 @@ bool read_gwas(string& zpath, string& region, gwasdata &gwas, annodef &adef, int
 	
 	bool use_esnps = (gwas.eweight_data.chr.size() > 0);
 	bool use_rsnps = (gwas.regel_data.chr.size() > 0);
+	bool use_dtss = (gwas.tss_data.chr.size() > 0);
 	
-	if( fetch_mode ){
-		string chr_s = gwas.eweight_data.chr[0];
-		int pos_s = gwas.eweight_data.pos[0];
-		int pos_e = gwas.eweight_data.pos[0];
-		for( int i = 1; i < gwas.eweight_data.chr.size(); i++ ){
-			if( gwas.eweight_data.pos[i] - pos_e > JUMP || gwas.eweight_data.chr[i] != chr_s ){
-				string region = chr_s + ":" + 
-					to_string( 
-						(pos_s > 1) ? pos_s-1 : 0
-					) + "-" + 
-					to_string(pos_e+1);
-				regions.push_back(region);
-				chr_s = gwas.eweight_data.chr[i];
-				pos_s = gwas.eweight_data.pos[i];
-				pos_e = gwas.eweight_data.pos[i];
-			}else{
-				pos_e = gwas.eweight_data.pos[i];
+	if( use_esnps && use_rsnps ){
+		fetch_mode = false;
+	}else{
+		if( ANNO_DEFS.nodef && !use_dtss ){
+			if( use_esnps || use_rsnps ){
+				fetch_mode = true;
 			}
 		}
-		regions.push_back( chr_s + ":" + to_string(pos_s-1) + "-" + to_string(pos_e+1) );
+	}
+	
+	if( fetch_mode ){
+		
+		if( use_rsnps ){
+			getRegions(regions, gwas.regel_data.chr, gwas.regel_data.start, gwas.regel_data.end);
+			cerr << "Fetching " << regions.size() << " regulatory regions from GWAS file ... \n\n";
+		}else if( use_esnps ){
+			getRegions(regions, gwas.eweight_data.chr, gwas.eweight_data.pos, gwas.eweight_data.pos);
+		}
+		
+
 	}
 	while ( fetchLine(zfile, line, regions, npassed, fetch_mode) ) {
 		vector<string> genes;
@@ -1149,24 +1240,27 @@ string unitdata::print_range(string& group){
 }
 
 
-double Lform_cov(snpdata& sstats1, snpdata& sstats2) {
-	double r = 0;
+void Lform_cov(double& r, snpdata& sstats1, snpdata& sstats2) {
+	r = 0;
 	for( int i=0; i < sstats1.w.size(); i++ ){
 		for( int j=0; j < sstats2.w.size(); j++ ){
 			double r_ij = 0.0;
 			if( sstats1.info.chr[i] == sstats2.info.chr[j] ){
 				r_ij = LDREF.gcorr( sstats1.info.chr[i], sstats1.info.ld_index[i] , sstats2.info.ld_index[j] );
+				//cout << r_ij << "\n";
 			}else{
-				// cerr << "\n WARNING: MISMATCHED CHR: " << sstats1.info.chr[i] << "(" << ts1 << ")" << " versus " << sstats2.info.chr[j] << "(" << ts2 << ")" << "\n";
+				cerr << "\n WARNING: MISMATCHED CHR: " << sstats1.info.chr[i] << " versus " << sstats2.info.chr[j]  << "\n";
+				abort();
 			}
 			r += (r_ij * sstats1.w[i] * sstats2.w[j] );
 		}
 	}
-	
+	// cout << r << "\t";
 	r = r / sqrt( sstats1.w_adj * sstats2.w_adj );
-	
+	// cout << "(" << r << ")";
 	if( abs(r) > 1.0001 ){
-		cout << "FATAL ERROR:: IMPOSSIBLE CORR VALUE = " << r << " \n\n";
+		cerr << "FATAL ERROR:: IMPOSSIBLE CORR VALUE = " << r << " \n\n";
+		abort();
 		r = 0;
 		for( int i=0; i < sstats1.w.size(); i++ ){
 			for( int j=0; j < sstats2.w.size(); j++ ){
@@ -1209,15 +1303,17 @@ double Lform_cov(snpdata& sstats1, snpdata& sstats2) {
 			}
 		}
 	}
-	
-	return r;
+	// cout << "(" << r << ")";
+	// return r;
 }
 
 Eigen::MatrixXd get_Lform_cov_mat(vector<string>& id1, vector<string>& id2, unitdata& dat1, unitdata& dat2) {
 	Eigen::MatrixXd out( id1.size() , id2.size() );
+	double r_val = 0;
 	for (int i=0; i < id1.size(); ++i){
 		for(int j=0; j < id2.size(); ++j){
-			out(i, j) = Lform_cov( dat1.sstats[id1[i]], dat2.sstats[id2[j]] );
+			Lform_cov(r_val, dat1.sstats[id1[i]], dat2.sstats[id2[j]] );
+			out(i, j) = r_val;
 		}
 	}
 }
@@ -1229,24 +1325,28 @@ listLD get_Lform_cov_list(vector<string>& id1, vector<string>& id2, unitdata& da
 	out.subclass1 = id1;
 	out.subclass2 = id2;
 	out.LDmat( id1.size() , id2.size() );
+	double r_val = 0;
 	for (int i=0; i < id1.size(); ++i){
 		for(int j=0; j < id2.size(); ++j){
-			out.LDmat(i, j) = Lform_cov( dat1.sstats[id1[i]], dat2.sstats[id2[j]] );
+			Lform_cov(r_val, dat1.sstats[id1[i]], dat2.sstats[id2[j]] );
+			out.LDmat(i, j) = r_val;
 		}
 	}
 }
 
-double unitdata::Lform_covar(string& ts1, string& ts2) {
-	Lform_cov(sstats[ts1], sstats[ts2]);
+void unitdata::Lform_covar(double& r, string& ts1, string& ts2) {
+	Lform_cov(r, sstats[ts1], sstats[ts2]);
 }
 
 Eigen::MatrixXd unitdata::get_Lform_covar() {
 	Eigen::MatrixXd out( Lform_groups.size() , Lform_groups.size() );
+	double r_val = 0;
 	for (int i=0; i < Lform_groups.size(); ++i){
 		out(i,i) = 1.00;
 		for(int j=i+1; j < Lform_groups.size(); ++j){
-			out(i, j) = Lform_covar( Lform_groups[i], Lform_groups[j] );
-			out(j, i) = out(i, j);
+			Lform_covar(r_val, Lform_groups[i], Lform_groups[j] );
+			out(i, j) = r_val;
+			out(j, i) = r_val;
 			
 		}
 	}
@@ -1259,7 +1359,7 @@ Eigen::MatrixXd unitdata::get_Lform_covar() {
 	// }
 	// cout << "\n\n";
 	
-	pruneLD(out, 1);
+	pruneLD(out, 0.95);
 	// cout << "\nPRUNED Lform corr matrix:\n" << out << "\n\n";
 	
 	return out;
@@ -1273,24 +1373,29 @@ Eigen::MatrixXd unitdata::get_Lform_covar(vector<double>& x) {
 		abort();
 	}
 	
+	double r_val = 0;
+	
 	for (int i=0; i < Lform_groups.size(); ++i){
 		out(i,i) = 1.00;
 		for(int j=i+1; j < Lform_groups.size(); ++j){
-			out(i, j) = Lform_covar( Lform_groups[i], Lform_groups[j] );
-			out(j, i) = out(i, j);
-			
+			Lform_covar(r_val, Lform_groups[i], Lform_groups[j] );
+			// cout << r_val << "\t";
+			out(i, j) = r_val;
+			out(j, i) = r_val;
 		}
+		// cout << "\n";
 	}
+	
 	
 	// cout << "\nLform corr matrix:\n" << out << "\n\n";
 	// cout << "Lform z-scores:\n\n";
 	
 	// for (int i=0; i < tissues.size(); ++i){
-	// 	cout << sstats[tissues[i]].qstat << "\t";
-	// }
-	// cout << "\n\n";
+	 	// cout << sstats[tissues[i]].qstat << "\t";
+	 // }
+	 // cout << "\n\n";
 	
-	pruneLD(out, x, 1);
+	pruneLD(out, x, 0.95);
 	// cout << "\nPRUNED Lform corr matrix:\n" << out << "\n\n";
 	
 	return out;
@@ -1467,6 +1572,11 @@ void gwasdata::runTest(string& name, string& group, bool is_element = false, cha
 string unitdata::print_summary(){
 	string n_classes = "E=" + to_string(tissues.size()) + ",R=" + to_string(regels.size()) + ",O=" + to_string(groups.size());
 	string out = chrom + "\t" + to_string(start_pos) + "-" + to_string(end_pos) + "\t" + gene_name + "\t" + to_string( uniq_pos.size() ) + "\t" + n_classes + "\t" + top_class + "\t" + top_subclass + "\t" + scien(min_pval,3)  + "\t" + scien(naive_pval,3) + "\t" + scien(global_pval,3);
+	if( MULTIBURDEN_TYPE == 3 ){
+		out += "\t" + Lform_pvals;
+	}else{
+		out += "\tOK"; 
+	}
 	out += "\n";
 	return out;
 }
@@ -1734,33 +1844,72 @@ void unitdata::multiBurden() {
 	double z_max = 0;
 	vector<double> z_stats;
 	
+	double sum_z_sq = 0.0;
+	vector<double> pvals;
+	
 	for(const string& ts : Lform_groups){
-		z_stats.push_back( sstats[ts].qstat );
-		if ( abs( sstats[ts].qstat ) > z_max ){
-			z_max = abs( sstats[ts].qstat );
+		double& zs = sstats[ts].qstat;
+		z_stats.push_back( zs );
+		if ( abs( zs ) > z_max ){
+			z_max = abs( zs );
+		}
+		sum_z_sq += zs*zs;
+		pvals.push_back( pchisq( zs*zs, 1) );
+	}
+	
+	Eigen::MatrixXd bcor;
+	
+	if( MULTIBURDEN_TYPE > 0 ){
+		bcor = get_Lform_covar(z_stats);
+		
+		sum_z_sq = 0.0;
+		
+		// this is necessary because we have now LD-pruned the z-stats vector ... 
+		for( const double zs : z_stats ){
+			sum_z_sq += zs*zs;
+		}
+		
+	}
+
+	Lform_pvals = "";
+	
+	double nv = z_stats.size();
+	
+	pval_bonf = min(1.00, nv*pchisq( z_max*z_max, 1));
+	pval_acat = cauchy_minP(pvals);
+	
+	Lform_MMVN_pval = pval_acat;
+	
+	if( MULTIBURDEN_TYPE==1 || MULTIBURDEN_TYPE==3 ){
+		pval_mmvn = MVN_minP(z_max, bcor); 
+		if( pval_mmvn<= 0 || pval_mmvn > pval_bonf ){
+			pval_mmvn = pval_bonf;
 		}
 	}
-	
-	Eigen::MatrixXd bcor = get_Lform_covar(z_stats);
-	
-	double sum_z_sq = 0.0;
-	
-	for( const double& zs : z_stats ){
-		sum_z_sq += zs*zs;
+	if( MULTIBURDEN_TYPE==2 || MULTIBURDEN_TYPE==3 ){
+		pval_skat = liu_pval(sum_z_sq, bcor);
+		
+		if(pval_skat < 0 ){
+			cerr << "FATAL ERROR: NEGATIVE MT-SKAT PVAL\n\n";
+			
+			cerr << "\n\n";
+			cerr << bcor ;
+			cerr << "\n\n";
+			cerr << sum_z_sq << "\n\n";
+			
+			abort();
+		}
+		
 	}
 	
-	double nv = bcor.rows();
-	
-	double pval_bonf = min(1.00, nv*pchisq( z_max*z_max, 1));
-	double pval_mmvn = min(pval_bonf, MVN_minP(z_max, bcor));
-	//double pval_skat = liu_pval(sum_z_sq, bcor);
-	
-	if( pval_mmvn <= 0 ){
-		//cerr << "\nWARNING: MVN_minP <= 0; using Bonferroni p-val\n";
-		pval_mmvn = pval_bonf;
-	}else if( pval_mmvn > pval_bonf){
-		//cerr << "\nWARNING: MVN_minP > Bonferroni p-val ... \n";
-		pval_mmvn = pval_bonf;
+	if( MULTIBURDEN_TYPE == 3 ){
+		Lform_pvals += "A:" + scien(pval_acat,3) + ",";
+		Lform_pvals += "Q:" + scien(pval_skat,3) + ",";
+		Lform_pvals += "M:" + scien(pval_mmvn,3);
+	}else if(MULTIBURDEN_TYPE == 1){
+		Lform_MMVN_pval = pval_mmvn;
+	}else if(MULTIBURDEN_TYPE == 2){
+		Lform_MMVN_pval = pval_skat;
 	}
 	
 	/*if( pval_mmvn < 1e-4 ){
@@ -1770,8 +1919,6 @@ void unitdata::multiBurden() {
 		cout << "Adjusted Minimum P-value = " << pval_mmvn << "\n\n";
 	}*/
 	//cout << "TEST_STATS\t" << z_max << "\t" << tissues.size() << "\t" << nv << "\t" << pval_bonf << "\t" << pval_skat << "\t" << pval_mmvn << "\n";
-	
-	Lform_MMVN_pval = pval_mmvn;
 	
 	return;
 }
@@ -1829,13 +1976,13 @@ void unitdata::globalPval(){
 				}
 				min_pval = sstats[x].pval;
 			}
-			if( sstats[x].z.size() > 1  ||  ( sstats[x].z.size()==1 && GLOBAL_CAUCHY)  ){
+			//if( sstats[x].z.size() > 1  ||  ( sstats[x].z.size()==1 && GLOBAL_CAUCHY)  ){
 				pval_vec.push_back(sstats[x].pval);
 				global_pval = min(global_pval, sstats[x].pval);
 				n_uniq_tests++;
-			}else if( sstats[x].z.size() == 1 && !GLOBAL_CAUCHY ){
-				Lform_groups.push_back(x);
-			}
+			//}else if( sstats[x].z.size() == 1 && !GLOBAL_CAUCHY ){
+			//	Lform_groups.push_back(x);
+			//}
 			n_total_tests++;
 		}
 	}
@@ -1858,13 +2005,13 @@ void unitdata::globalPval(){
 					}
 					min_pval = sstats[x].pval;
 				}
-				if( sstats[x].z.size() > 1  ||  ( sstats[x].z.size()==1 && GLOBAL_CAUCHY)  ){
+				//if( sstats[x].z.size() > 1  ||  ( sstats[x].z.size()==1 && GLOBAL_CAUCHY)  ){
 					pval_vec.push_back(sstats[x].pval);
 					global_pval = min(global_pval, sstats[x].pval);
 					n_uniq_tests++;
-				}else if( sstats[x].z.size() == 1 && !GLOBAL_CAUCHY ){
-					Lform_groups.push_back(x);
-				}
+				//}else if( sstats[x].z.size() == 1 && !GLOBAL_CAUCHY ){
+				//	Lform_groups.push_back(x);
+				//}
 			}
 			n_total_tests++;
 		}

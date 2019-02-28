@@ -91,6 +91,11 @@ class unitdata
 		double Lform_MMVN_pval;
 		double min_pval;
 		double naive_pval;
+		
+		double pval_bonf, pval_mmvn, pval_acat, pval_skat;
+		
+		string Lform_pvals;
+		
 		string top_class; 
 		string top_subclass; 
 		
@@ -127,7 +132,7 @@ class unitdata
 		//void print_range(string);
 		string print_range(string&);
 		void update(dparam_l, vector<string>);
-		double Lform_covar( string&, string& );
+		void Lform_covar( double&, string&, string& );
 		Eigen::MatrixXd get_Lform_covar();
 		Eigen::MatrixXd get_Lform_covar(vector<double>&);
 		bool exists(string);
@@ -144,10 +149,44 @@ class listLD
 		Eigen::MatrixXd LDmat;
 };
 
+class chrom_index 
+{
+	public:
+		vector<int> start;
+		vector<int> end;
+	
+		chrom_index();
+		
+		void init();
+		void update(string&, int);
+		int startIndex(string&);
+		int endIndex(string&);
+};
+
+class tssdat
+{
+	public:
+		int k_s, k_e, m;
+		
+		chrom_index chr_idx;
+		
+		vector<string> genes;
+		vector<string> chr;
+		vector<int> start;
+		vector<int> end;
+
+		tssdat();
+		tssdat(string&, string);
+		void readTSS(string&, string);
+};
+
 class regel
 {
 	public:
 		int k, m;
+		
+		chrom_index chr_idx;
+		
 		vector<string> names;
 		vector<string> chr;
 		vector<int> start;
@@ -163,26 +202,15 @@ class regel
 		void readElements(string&, string);
 };
 
-class tssdat
-{
-	public:
-		int k_s, k_e, m;
-		vector<string> genes;
-		vector<string> chr;
-		vector<int> start;
-		vector<int> end;
-
-		tssdat();
-		tssdat(string&, string);
-		void readTSS(string&, string);
-};
-
 class eweight
 {
 	public:
 		tsl::hopscotch_set<string> tissues;
 		int k, m;
 		vector<string> chr;
+		
+		chrom_index chr_idx;
+		
 		vector<int> pos;
 		vector<string> ref;
 		vector<string> alt;
@@ -246,6 +274,8 @@ void debug();
 void setAlphaTSS(vector<double>);
 void setWindowSizeTSS(int);
 void setVerbosityTSS(double);
+void setMultiForm(string);
+
 
 bool read_snp_info(string &file_path, snpinfo &sinfo);
 

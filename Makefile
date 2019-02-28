@@ -1,7 +1,7 @@
 VERSION=0.2
 
-CPPFLAGS= -Ofast -flto -pipe  -pg
-CXXFLAGS= -std=c++11 -DNDEBUG  -pg
+CPPFLAGS= -Ofast -flto -pipe 
+CXXFLAGS= -std=c++11 -DNDEBUG 
 FFLAGS=
 
 LDFLAGS= -lz -lm

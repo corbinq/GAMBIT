@@ -7,11 +7,11 @@
 using namespace std;
 
 void print_usage() {
-	cerr << "tools for analysis of GWAS summary statistics\n\n";
-	cerr << "command line options \n";
+	cerr << "Gene-based Analysis with oMniBus, Integrative Tests using GWAS summary statistics\n\n";
+	cerr << "command line options \n\n";
 	cerr << "    input\n";
 	cerr << "      --gwas STR : annotated GWAS summary statistics file\n";
-	cerr << "      --tss-bed STR : bed file specifying TSS locations \n";
+	cerr << "      --tss-bed STR : bed file specifying TSS locations for dTSS weights \n";
 	cerr << "      --anno-bed [data/anno.bed.gz] : annotation bed file\n";
 	cerr << "      --anno-defs [defs.txt] : annotation hierarchy definitions\n";
 	cerr << "      --betas [data/betas.txt.gz] : eSNP weight file\n";
@@ -20,8 +20,10 @@ void print_usage() {
 	cerr << "      --ldref-only : only retain variants with complete LD information\n";
 	cerr << "      --tissues STR : only use eSNPs from tissues listed in file\n";
 	cerr << "    test statistics\n";
+	cerr << "      --tss-alpha : alpha values (comma-separated) for dTSS weights \n";
 	cerr << "      --acat : use ACAT rather than SKAT for regulatory elements & exons\n";
-	cerr << "      --tissues STR : only use eSNPs from tissues listed in file\n";
+	cerr << "      --tissue-aggreg [ACAT] : method to aggregate eSNP tests across tissues (\"ACAT\", \"MinP\", \"SKAT\", or \"All\") \n";
+	cerr << "      --tissues STR : only use eSNPs from listed tissues (comma-separated list or file)\n";
 	cerr << "    output\n";
 	cerr << "      --region STR : restrict analysis to specified region \n";
 	cerr << "      --stdout : print to stdout rather than file \n";
@@ -62,6 +64,8 @@ int main (int argc, char *argv[]) {
 	int print_screen = 0;
 	int twas = 0;
 	
+	string multi_test_type = "0";
+	
 	int no_memo_LD = 0;
 	int preload_LD = 0;
 	
@@ -101,6 +105,7 @@ int main (int argc, char *argv[]) {
 		{"tissues", required_argument, 0, 't'},
 		{"betas", required_argument, 0, 'b'},
 		{"merge-tissues", no_argument, &tmerge, 1},
+		{"tissue-aggreg", required_argument, 0, 'm'},
 		{"debug", no_argument, &debug_mode, 1},
 		{"acat", no_argument, &cauchy_no_skat, 1},
 		{"stdout", no_argument, &print_screen, 1},
@@ -113,7 +118,7 @@ int main (int argc, char *argv[]) {
 		{0, 0, 0, 0}
 	};
 	int long_index =0;
-	while ((opt = getopt_long(argc,argv,"l:g:a:f:s:x:y:e:j:t:b:r:p:v:",long_options,&long_index)) != -1) {
+	while ((opt = getopt_long(argc,argv,"l:g:a:f:s:x:y:e:j:t:b:m:r:p:v:",long_options,&long_index)) != -1) {
 		switch (opt) {
 			case 'f' : afile = optarg;
 				break;
@@ -140,6 +145,8 @@ int main (int argc, char *argv[]) {
 			case 'e' : TSS_VERBOSITY_PVAL_STR = optarg;
 				break;
 			case 'b' : bfile = optarg;
+				break;
+			case 'm' : multi_test_type = optarg; 
 				break;
 			case 'r' : region = optarg; region_mode = 1;
 				break;
@@ -218,6 +225,8 @@ int main (int argc, char *argv[]) {
 	}else{
 		setPreload(false);
 	}
+	
+	setMultiForm(multi_test_type);
 	
 	if( JUMP_DIST_STR != "" ){
 		jump_dist = stoi(JUMP_DIST_STR);
@@ -304,7 +313,7 @@ int main (int argc, char *argv[]) {
 				ofstream genes_out(gname,ios::out);
 				ofstream strat_out(fname,ios::out);
 				
-				genes_out << "#CHR\tPOS1\tPOS2\tGENE\tTOP_CLASS\tTOP_SUBCLASS\tMIN_UNADJ_PVAL\tPVAL\n";
+				genes_out << "#CHR\tPOS1\tPOS2\tGENE\tTOP_CLASS\tTOP_SUBCLASS\tMIN_UNADJ_PVAL\tPVAL\tINFO\n";
 				strat_out << "#CHR\tPOS\tGENE\tCLASS\tSUBCLASS\tNSNPS\tSTAT\tPVAL\tINFO\n";
 				
 				for(string& group : gwinfo[target_gene].groups) {
