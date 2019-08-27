@@ -103,17 +103,17 @@ Statistical methods implemented in GAMBIT:
 ## Software References
 
 Libraries and resources used or adapted in GAMBIT:<br/>
-** PDF, CDF, and quantile functions**<br/>
+**PDF, CDF, and quantile functions** <br/>
 - [ROOT system library, CERN](https://root.cern.ch/)
 - [CDFLIB, Brown et al.](https://people.sc.fsu.edu/~jburkardt/cpp_src/cdflib/cdflib.html)
 - [eigenmvn, Benazera et al.](https://github.com/beniz/eigenmvn)
 - [libMvtnorm, Zhan et al.](https://github.com/zhanxw/libMvtnorm)
-** Hopscotch hashing**<br/>
+**Hopscotch hashing** <br/>
 - [tsl library, Tessil et al.](https://github.com/Tessil/hopscotch-map)
-** Tabix and HTSLIB**<br/>
+**Tabix and HTSLIB** <br/>
 - [tabixpp, ekg et al.](https://github.com/ekg/tabixpp)
 - [htslib, samtools team](https://github.com/samtools/htslib)
-** Matrix libraries**<br/>
+**Matrix libraries** <br/>
 - [Eigen matrix library](http://eigen.tuxfamily.org)
 
 ## Feedback and bug reports
