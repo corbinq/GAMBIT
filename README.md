@@ -89,7 +89,32 @@ UTR       UTR5              Utr5
 ```
 
 - **Window size.** The window size for dTSS-weighted gene-based tests can be modified by specifying `--tss-window BASEPAIRS` (500 Kbp by default).
-- **dTSS decay function.** The relative weight assigned to variants nearer/farther from the TSS can be modified by specifying `--tss-alpha ALPHA`, where alpha=0 implies all variants receive equal weight, and larger values confer more weight to variants nearer the TSS. `--tss-alpha` also accepts comma-separated lists of alpha values, in which case GAMBIT computes ombinbus test p-values across all specified values (individual p-values are reported in `INFO` output field). By default, GAMBIT uses dTSS alpha values `1e-4,5e-5,1e-5,5e-6`. 
+- **dTSS decay function.** The relative weight assigned to variants nearer/farther from the TSS can be modified by specifying `--tss-alpha ALPHA`, where alpha=0 implies all variants receive equal weight, and larger values confer more weight to variants nearer the TSS. `--tss-alpha` also accepts comma-separated lists of alpha values, in which case GAMBIT computes global test p-values across all specified values (individual p-values are reported in `INFO` output field). By default, GAMBIT uses dTSS alpha values `1e-4,5e-5,1e-5,5e-6`. 
+
+## Methods References
+
+Statistical methods implemented in GAMBIT:
+- Sequence Kernel Association Test (SKAT): [Wu et al. (2011), *AJHG*](https://doi.org/10.1016/j.ajhg.2011.05.029)
+- TWAS: [Gusev et al. (2016), *Nat Genet*](https://www.nature.com/articles/ng.3506)
+- PrediXcan: [Gamazon et al. (2015), *Nat Genet*](https://www.nature.com/articles/ng.3367) and [Barbeira et al. (2018), *Nat Comm*](https://www.nature.com/articles/s41467-018-03621-1)
+- Aggregated Cauchy Association Test (ACAT): [Liu et al. (2019), *AJHG*](https://doi.org/10.1016/j.ajhg.2019.01.002) and [Liu and Xie (2018), *arXiv*](https://arxiv.org/abs/1808.09011)
+- Asymptotically exact Harmonic Mean P-value (HMP): [Wilson (2019), *PNAS*](https://doi.org/10.1073/pnas.1814092116)
+
+## Software References
+
+Libraries and resources used or adapted in GAMBIT:
+**PDF, CDF, and quantile functions**
+- [CDFLIB, Brown et al.](https://people.sc.fsu.edu/~jburkardt/cpp_src/cdflib/cdflib.html)
+- [eigenmvn, Benazera et al.](https://github.com/beniz/eigenmvn)
+- [libMvtnorm, Zhan et al.](https://github.com/zhanxw/libMvtnorm)
+- [CERN's ROOT system library](https://root.cern.ch/)
+**Hopscotch hashing**
+- [tsl library, Tessil et al.](https://github.com/Tessil/hopscotch-map)
+**Tabix and HTSLIB** 
+- [tabixpp, ekg et al.](https://github.com/ekg/tabixpp)
+- [htslib, samtools team](https://github.com/samtools/htslib)
+**Matrix libraries** 
+- [Eigen matrix library](http://eigen.tuxfamily.org)
 
 ## Feedback and bug reports
 

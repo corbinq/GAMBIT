@@ -1,6 +1,15 @@
 #ifndef CDFLIB_HPP
 #define CDFLIB_HPP
 
+# include <cstdlib>
+# include <iostream>
+# include <iomanip>
+# include <cmath>
+# include <ctime>
+# include <cstring>
+
+using namespace std;
+
 double algdiv ( double *a, double *b );
 double alnrel ( double *a );
 double apser ( double *a, double *b, double *x, double *eps );

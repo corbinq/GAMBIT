@@ -1,8 +1,11 @@
 #ifndef PROCESSGWAS_HPP
 #define PROCESSGWAS_HPP
 
-#include "eigenmvn.hpp"
+#include "eigenmvn/eigenmvn.hpp"
 #include "processLD.hpp"
+
+#include <tabix.hpp>
+#include <cdflib.hpp>
 
 #include <iostream>
 #include <sstream>

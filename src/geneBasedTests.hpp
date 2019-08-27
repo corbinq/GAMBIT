@@ -1,7 +1,9 @@
 #ifndef GENEBASEDTESTS_HPP
 #define GENEBASEDTESTS_HPP
 
-#include "eigenmvn.hpp"
+#include "cdflib/cdflib.hpp"
+#include "eigenmvn/eigenmvn.hpp"
+#include "ROOT_Math/Landau.hpp"
 
 #include <iostream>
 #include <sstream>
@@ -20,6 +22,8 @@
 using namespace std;
 
 double logBF( vector<double>&,  Eigen::MatrixXd&, Eigen::MatrixXd&, double&, double&);
+double HMP_pval(vector<double>&);
+double HMP_pval_weighted(vector<double>&, vector<double>&);
 
 // double pcauchy(double);
 // double qcauchy(double);

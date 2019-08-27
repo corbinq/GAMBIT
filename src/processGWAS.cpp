@@ -1,5 +1,5 @@
 #include "processGWAS.hpp"
-
+#include "processLD.hpp"
 #include "geneBasedTests.hpp"
 #include "common.hpp"
 

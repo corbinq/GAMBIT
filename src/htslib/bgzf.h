@@ -28,7 +28,7 @@
 #include <stdio.h>
 #include <zlib.h>
 #ifdef _USE_KNETFILE
-#include "knetfile.h"
+#include <knetfile.h>
 #endif
 
 //typedef int8_t bool;

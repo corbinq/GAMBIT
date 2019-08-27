@@ -33,7 +33,7 @@
 #ifndef __EIGENMULTIVARIATENORMAL_HPP
 #define __EIGENMULTIVARIATENORMAL_HPP
 
-#include "Eigen/Dense"
+#include "../Eigen/Dense"
 #include <random>
 
 /*

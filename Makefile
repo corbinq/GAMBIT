@@ -1,15 +1,16 @@
-VERSION=0.2
+VERSION=0.3
 
-CPPFLAGS= -Ofast -flto -pipe 
+CPPFLAGS= -Ofast -flto -pipe -I$(cdir)/src/htslib -I$(cdir)/src/cdflib -I$(cdir)/src/tabixpp -L$(cdir)/src/htslib -L$(cdir)/src/cdflib -L$(cdir)/src/tabixpp 
 CXXFLAGS= -std=c++11 -DNDEBUG 
 FFLAGS=
-
 LDFLAGS= -lz -lm
 
-cppsrc = $(wildcard src/*.cpp) src/tabix_util/tabix.cpp
-csrc = $(wildcard src/*.c) src/tabix_util/index.c src/tabix_util/bgzf.c
+cppsrc = $(wildcard src/*.cpp) $(wildcard src/ROOT_Math/*.cpp) $(wildcard src/cdflib/*.cpp)  $(wildcard src/tabixpp/*.cpp)
+csrc = $(wildcard src/*.c) src/htslib/bgzf.c src/htslib/kstring.c src/htslib/knetfile.c src/htslib/index.c
 
 objs = $(cppsrc:.cpp=.o) $(csrc:.c=.o) 
+
+cdir = ${CURDIR}
 
 bin/GAMBIT: $(objs) src/libMvtnorm/libMvtnorm.a
 	$(CXX) $(CPPFLAGS) -o $@ $^ $(LDFLAGS)

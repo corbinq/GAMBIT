@@ -41,7 +41,7 @@ int main (int argc, char *argv[]) {
 	string dfile = "";
 	string afile = "";
 	string sfile = "";
-	string ldfile = "/net/snowwhite/home/corbinq/panels/G1K_EUR_3V5/chr$.vcf.gz";
+	string ldfile = "G1K_EUR_3V5/chr$.vcf.gz";
 	string outfile = "";
 	string tfile = "";
 	string tssfile = "";

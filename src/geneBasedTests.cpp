@@ -1,9 +1,52 @@
 #include "geneBasedTests.hpp"
 #include "libMvtnorm/mvtnorm.h"
-#include "cdflib.hpp"
+#include "cdflib/cdflib.hpp"
 
 using namespace std;
 
+double HMP_pval_weighted(vector<double>& p, vector<double>& w){
+	
+	double L = p.size();
+	double HMP = 0;
+	double sum_w = 0;
+	
+	for( int i = 0; i < L; i++){
+		HMP += w[i]/p[i];
+		sum_w += w[i];
+	}
+	HMP = sum_w/HMP;
+	
+	// Parameters from Wilson (2019):
+	// LOC_L1 = 1 + digamma(1) + std::log(M_PI/2)
+	// the location parameter when L==1, and
+	// SCALE = M_PI/2 
+	
+	static double LOC_L1 = 0.874367040387922;
+	static double SCALE = 1.5707963267949;
+	
+	return landau_ccdf(1/HMP, log(L) + LOC_L1, SCALE);
+}
+
+double HMP_pval(vector<double>& p){
+	
+        double L = p.size();
+        double HMP = 0;
+
+        for( int i = 0; i < L; i++){
+                HMP += 1/p[i];
+        }
+        HMP = L/HMP;
+
+        // Parameters from Wilson (2019):
+        // LOC_L1 = 1 + digamma(1) + std::log(M_PI/2)
+        // the location parameter when L==1, and
+        // SCALE = M_PI/2
+
+        static double LOC_L1 = 0.874367040387922;
+        static double SCALE = 1.5707963267949;
+
+        return landau_ccdf(1/HMP, log(L) + LOC_L1, SCALE);
+}
 
 double pcauchy(long double x){
 	return 0.5 + atan( x )/M_PI;

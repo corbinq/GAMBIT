@@ -1,4 +1,5 @@
 #include "processLD.hpp"
+#include "tabixpp/tabix.hpp"
 #include "common.hpp"
 
 using namespace std;

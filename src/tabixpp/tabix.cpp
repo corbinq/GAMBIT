@@ -1,4 +1,6 @@
 #include "tabix.hpp"
+#include <bgzf.h>
+#include <tabix.h>
 
 Tabix::Tabix(void) { }
 

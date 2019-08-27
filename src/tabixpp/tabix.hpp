@@ -1,10 +1,12 @@
+#ifndef TABIXPP_HPP
+#define TABIXPP_HPP
+
 #include <string>
 #include <stdlib.h>
 #include <sys/stat.h>
-#include "bgzf.h"
-#include "tabix.h"
+#include <bgzf.h>
+#include <tabix.h>
 #include <iostream>
-
 
 using namespace std;
 
@@ -31,3 +33,5 @@ public:
     bool getNextLine(string& line);
 
 };
+
+#endif
