@@ -1,9 +1,7 @@
 #ifndef GENEBASEDTESTS_HPP
 #define GENEBASEDTESTS_HPP
 
-#include "cdflib/cdflib.hpp"
-#include "eigenmvn/eigenmvn.hpp"
-#include "ROOT_Math/Landau.hpp"
+#include "distributionFunctions.hpp"
 
 #include <iostream>
 #include <sstream>
@@ -22,25 +20,18 @@
 using namespace std;
 
 double logBF( vector<double>&,  Eigen::MatrixXd&, Eigen::MatrixXd&, double&, double&);
-double HMP_pval(vector<double>&);
-double HMP_pval_weighted(vector<double>&, vector<double>&);
+double pval_HMP(vector<double>&);
+double pval_HMP(vector<double>&, vector<double>&);
 
-// double pcauchy(double);
-// double qcauchy(double);
+double pval_ACAT(vector<double>&);
 
-double cauchy_minP(vector<double>&);
-
-double cauchy_test_weighted(vector<double>&, vector<double>&);
-
-double pchisq(double, double);
-double pchisq(double, double, double);
-double qchisq(double, double);
+double pval_ACAT(vector<double>&, vector<double>&);
 
 double skat_pval(vector<double>& , Eigen::MatrixXd& , double& );
 
-double liu_pval(vector<double>& , Eigen::MatrixXd& , double& );
-double liu_pval(double , Eigen::MatrixXd& );
+double pval_LiuSKAT(vector<double>& , Eigen::MatrixXd& , double& );
+double pval_LiuSKAT(double , Eigen::MatrixXd& );
 
-double MVN_minP(double& , Eigen::MatrixXd&  );
+double pval_maxZsq(double& , Eigen::MatrixXd&  );
 
 #endif

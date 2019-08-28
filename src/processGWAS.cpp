@@ -17,8 +17,8 @@ double p_upper = 1;
 double epsilon = 0.000000000001;
 
 int MULTIBURDEN_TYPE = 0;
-// 0 => ACAT 
-// 1 => min-p-value MVN
+// 0 => ACAT/HMP
+// 1 => MVN maxZsq
 // 2 => SKAT
 // 3 => ALL TESTS
 
@@ -36,11 +36,13 @@ vector<double> TSS_ALPHA;
 int TSS_WINDOW;
 double TSS_VERBOSITY_PVAL;
 
+string PVAL_COMB_METHOD = "HMP"; // use HMP by default
+
 bool DEBUG = false;
 bool NOMISS = false;
 
-bool ENH_CAUCHY = true;
-bool GLOBAL_CAUCHY = false;
+bool ENH_COMB_PVAL = true;
+bool GLOBAL_COMB_PVAL = false;
 
 bool PRINT_ALL_REGEL_GENES = true;
 
@@ -52,27 +54,56 @@ int JUMP = 100000;
 
 annodef ANNO_DEFS;
 
-void globalCauchy(bool gc){
-	GLOBAL_CAUCHY = gc;
+void setCombPvalMethod(string comb_method){
+	transform(comb_method.begin(), comb_method.end(), comb_method.begin(), ::toupper);
+	PVAL_COMB_METHOD = comb_method;
+	if( comb_method == "HMP" ){
+		cerr << "Using HMP to combine p-values ... \n";
+	}else if( comb_method == "ACAT" ){
+		cerr << "Using ACAT to combine p-values ... \n";
+	}else{
+		cerr << "Fatal error: Unknown p-value combination method: '" << comb_method << "'\n";
+		abort();
+	}
 }
 
+double pval_comb(vector<double>& p, vector<double>& w){
+	if( PVAL_COMB_METHOD == "ACAT" ){
+		return pval_ACAT(p, w);
+	}else{
+		return pval_HMP(p, w);
+	}
+}
+
+double pval_comb(vector<double>& p){
+	if( PVAL_COMB_METHOD == "ACAT" ){
+		return pval_ACAT(p);
+	}else{
+		return pval_HMP(p);
+	}
+}
+
+void globalCombPval(bool gc){
+	GLOBAL_COMB_PVAL = gc;
+}
 
 void setMultiForm(string test_type){
 	transform(test_type.begin(), test_type.end(), test_type.begin(), ::tolower);
 	if( test_type == "0" || test_type == "acat" ){
 		MULTIBURDEN_TYPE = 0;
-	}else if( test_type == "1" || test_type == "minp" ){
+	}else if( test_type == "1" || test_type == "maxzsq" || test_type == "minpval" || test_type == "m-form" ){
 		MULTIBURDEN_TYPE = 1;
 	}else if( test_type == "2" || test_type == "q-form" || test_type == "skat" ){
 		MULTIBURDEN_TYPE = 2;
 	}else if( test_type == "3" || test_type == "all" ){
 		MULTIBURDEN_TYPE = 3;
 	}else{
-		cerr << "\nFATAL ERROR: valid --multi-test args are \"ACAT\" (default), \"MinP\", \"Q-form\", or \"All\" \n\n";
+		cerr << "\nFATAL ERROR: valid --multi-test args are \"ACAT\" (default), \"MaxZsq\", \"Q-form\", or \"All\" \n\n";
 		abort();
 	}
 	//return MULTIBURDEN_TYPE;
 }
+
 
 void setDistNZ(){
 	MIN_NZ_QT = 1 - pchisq(MIN_NZ_Z*MIN_NZ_Z, 1);
@@ -510,7 +541,7 @@ bool gwasdata::cross_regel(string& chr_i, int& pos_i, string& ref_i, string& alt
 				all_genes.insert(gene);
 			}
 			
-			//if( ENH_CAUCHY ){
+			//if( ENH_COMB_PVAL ){
 			
 			//}else{
 				pushElement(names[k], elid[k], chr_i, pos_i, ref_i, alt_i, rsid_i, n, z, index);
@@ -521,7 +552,7 @@ bool gwasdata::cross_regel(string& chr_i, int& pos_i, string& ref_i, string& alt
 				while( j <= k_max && start[j] <= pos_i ) {
 					j++;
 					if( pos_i >= start[j] && pos_i <= end[j] ) {
-						//if( ENH_CAUCHY ){
+						//if( ENH_COMB_PVAL ){
 			
 						//}else{
 							pushElement(names[j], elid[j], chr_i, pos_i, ref_i, alt_i, rsid_i, n, z, index);
@@ -1525,7 +1556,7 @@ void gwasdata::runTest(string& name, string& group, bool is_element = false, cha
 	if( is_element ){
 		//string& enh_chrom = data[name].sstats[group].info.chr[0];
 		
-		//if( ENH_CAUCHY ){
+		//if( ENH_COMB_PVAL ){
 			
 		//}else{
 		
@@ -1637,11 +1668,11 @@ void snpdata::skat(){
 		LDREF.print_LD(info);
 	}
 
-	pval = liu_pval(z, sigma, logdet);
+	pval = pval_LiuSKAT(z, sigma, logdet);
 	
 	Eigen::MatrixXd iden = Eigen::MatrixXd::Identity(nvar, nvar);
 
-	double pval_no_ld = liu_pval(z, iden, logdet);
+	double pval_no_ld = pval_LiuSKAT(z, iden, logdet);
 
 	if( pval_no_ld > pval && pval < 0.001 ) {
 		flag = "LD_MISMATCH";
@@ -1766,7 +1797,7 @@ void snpdata::cauchy_w(bool weight_by_dtss){
 		
 		for(double& alpha : TSS_ALPHA){
 			vector<double> wei_alpha = expWeight(wei, alpha);
-			double p_i = cauchy_test_weighted(pvals, wei_alpha);
+			double p_i = pval_comb(pvals, wei_alpha);
 			if( p_i <= TSS_VERBOSITY_PVAL ){
 				verbose = true;
 			}
@@ -1774,7 +1805,7 @@ void snpdata::cauchy_w(bool weight_by_dtss){
 			pval_alpha.push_back(p_i);
 		}
 		
-		pval = cauchy_minP(pval_alpha);
+		pval = pval_comb(pval_alpha);
 			
 		if( pval <= TSS_VERBOSITY_PVAL ){
 			verbose = true;
@@ -1785,7 +1816,7 @@ void snpdata::cauchy_w(bool weight_by_dtss){
 		
 	}else{
 		
-		pval = cauchy_test_weighted(pvals, wei);
+		pval = pval_comb(pvals, wei);
 		
 	}
 	
@@ -1823,7 +1854,7 @@ void snpdata::cauchy(){
 
 	flag = "OK";
 	
-	pval = cauchy_minP(pvals);
+	pval = pval_comb(pvals);
 	
 	nvar_total = nvar;
 
@@ -1876,18 +1907,18 @@ void unitdata::multiBurden() {
 	double nv = z_stats.size();
 	
 	pval_bonf = min(1.00, nv*pchisq( z_max*z_max, 1));
-	pval_acat = cauchy_minP(pvals);
+	pval_acat = pval_comb(pvals);
 	
 	Lform_MMVN_pval = pval_acat;
 	
 	if( MULTIBURDEN_TYPE==1 || MULTIBURDEN_TYPE==3 ){
-		pval_mmvn = MVN_minP(z_max, bcor); 
+		pval_mmvn = pval_maxZsq(z_max, bcor); 
 		if( pval_mmvn<= 0 || pval_mmvn > pval_bonf ){
 			pval_mmvn = pval_bonf;
 		}
 	}
 	if( MULTIBURDEN_TYPE==2 || MULTIBURDEN_TYPE==3 ){
-		pval_skat = liu_pval(sum_z_sq, bcor);
+		pval_skat = pval_LiuSKAT(sum_z_sq, bcor);
 		
 		if(pval_skat < 0 ){
 			cerr << "FATAL ERROR: NEGATIVE MT-SKAT PVAL\n\n";
@@ -1925,12 +1956,12 @@ void unitdata::multiBurden() {
 
 
 void unitdata::globalPval(){
-	global_pval = 1.000;
-	min_pval = 1.000;
-	naive_pval = 1.000;
-	n_uniq_tests = 0.00;
+	global_pval = 1.0;
+	min_pval = 1.0;
+	naive_pval = 1.0;
+	n_uniq_tests = 0.0;
 	vector<double> pval_vec;
-	double n_total_tests = 0.00;
+	double n_total_tests = 0.0;
 	top_subclass = "";
 	top_class = "";
 	if( tissues.size() > 0 ){
@@ -1949,7 +1980,7 @@ void unitdata::globalPval(){
 				}
 				min_pval = sstats[ts].pval;
 			}
-			if( GLOBAL_CAUCHY ){
+			if( GLOBAL_COMB_PVAL ){
 				pval_vec.push_back(sstats[ts].pval);
 				global_pval = min(global_pval, sstats[ts].pval);
 				n_uniq_tests++;
@@ -1976,11 +2007,11 @@ void unitdata::globalPval(){
 				}
 				min_pval = sstats[x].pval;
 			}
-			//if( sstats[x].z.size() > 1  ||  ( sstats[x].z.size()==1 && GLOBAL_CAUCHY)  ){
+			//if( sstats[x].z.size() > 1  ||  ( sstats[x].z.size()==1 && GLOBAL_COMB_PVAL)  ){
 				pval_vec.push_back(sstats[x].pval);
 				global_pval = min(global_pval, sstats[x].pval);
 				n_uniq_tests++;
-			//}else if( sstats[x].z.size() == 1 && !GLOBAL_CAUCHY ){
+			//}else if( sstats[x].z.size() == 1 && !GLOBAL_COMB_PVAL ){
 			//	Lform_groups.push_back(x);
 			//}
 			n_total_tests++;
@@ -2005,27 +2036,27 @@ void unitdata::globalPval(){
 					}
 					min_pval = sstats[x].pval;
 				}
-				//if( sstats[x].z.size() > 1  ||  ( sstats[x].z.size()==1 && GLOBAL_CAUCHY)  ){
+				//if( sstats[x].z.size() > 1  ||  ( sstats[x].z.size()==1 && GLOBAL_COMB_PVAL)  ){
 					pval_vec.push_back(sstats[x].pval);
 					global_pval = min(global_pval, sstats[x].pval);
 					n_uniq_tests++;
-				//}else if( sstats[x].z.size() == 1 && !GLOBAL_CAUCHY ){
+				//}else if( sstats[x].z.size() == 1 && !GLOBAL_COMB_PVAL ){
 				//	Lform_groups.push_back(x);
 				//}
 			}
 			n_total_tests++;
 		}
 	}
-	Lform_MMVN_pval = 1.00;
+	Lform_MMVN_pval = 1.0;
 	if(Lform_groups.size() > 0 ){
 		n_uniq_tests++;
 		multiBurden();
 		pval_vec.push_back(Lform_MMVN_pval);
 	}
-	if( n_uniq_tests < 1.00 ){
-		n_uniq_tests = 1.00;
+	if( n_uniq_tests < 1.0 ){
+		n_uniq_tests = 1.0;
 	}
-	if( n_total_tests <= 1.00 ){
+	if( n_total_tests <= 1.0 ){
 		global_pval = min_pval;
 		naive_pval = min_pval;
 		return;
@@ -2041,9 +2072,9 @@ void unitdata::globalPval(){
 	//global_pval = n_uniq_tests*min(Lform_MMVN_pval, global_pval);
 	//global_pval = min(global_pval, 1.00);
 
-	global_pval = cauchy_minP(pval_vec);
+	global_pval = pval_comb(pval_vec);
 
-	naive_pval = min(n_total_tests*min_pval, 1.00);
+	naive_pval = min(n_total_tests*min_pval, 1.0);
 
 	//if( global_pval < min_pval ){
 	//	global_pval = min(min_pval*n_uniq_tests, 1.00);

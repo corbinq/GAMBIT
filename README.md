@@ -2,9 +2,8 @@
 
 A C++ tool for Gene-based Analysis with oMniBus, Integrative Tests
 
-- Implements SKAT, burden, and ACAT gene-based test methods using variant- or region-based functional annotations
-- Calculates annotation-stratified gene-based tests (e.g., TWAS/PrediXcan tests using eSNPs, gene-based tests using only coding variants, and gene-based tests using enhancer-to-target-gene maps)
-- Calculates omnibus gene-based tests by aggregating across annotation classes
+- Implements several gene-based test forms (quadratic: weighted sum of Zsq, linear: weighted sum of Z, and maximum Zsq) to aggregate GWAS single-variant summary statistics cross-referenced with variant- or region-based functional annotations
+- Calculates annotation-stratified gene-based tests (e.g., TWAS/PrediXcan tests using eSNPs, gene-based tests using only coding variants, and gene-based tests using enhancer-to-target-gene maps), and omnibus tests by combining p-values for each gene 
 - Inputs: GWAS association summary statistics file (chromosome, position, ref/alt allele, and z-score or beta-hat + se), annotation files, and LD reference panel
 
 
@@ -38,7 +37,7 @@ chr1  769200  769400  Enhancer  chr1:769200:769400  C1orf170:3.36|PERM1:3.36    
 
 - Association tests for individual regulatory elements is reported in `*.stratified_out.txt` files, and gene-based p-values (aggregating across regulatory elements for each gene) in `*.summary_out.txt` files.
 
-- **Aggregation Methods for Regulatory Elements.** By default, GAMBIT aggregates test statistics across variants in regulatory elements using a weighted sum of single-variant chi-squared statistics (SKAT gene-based test).  To instead use weighted ACAT to combine single-variant p-values, specify `--acat`.
+- **Aggregation Methods for Regulatory Elements.** By default, GAMBIT aggregates test statistics across variants in regulatory elements using a weighted sum of single-variant chi-squared statistics (SKAT gene-based test).  To instead use weighted ACAT or HMP to combine single-variant p-values, specify `--no-skat` and a p-value combination method via `--pcomb`.
 
 #### Gene-Based Analysis with Coding and Other Annotated Variants 
 
@@ -57,7 +56,7 @@ UTR       UTR5              Utr5
 
 - **Gene-Based Test Output.** Test statistics stratified by gene and annotation subclass are provided in `*.stratified_out.txt` files, and gene-based p-values (aggregating across annotation classes for each gene) in `*.summary_out.txt` files.
 
-- **Variant Aggregation Methods.** By default, GAMBIT aggregates test statistics across variants using a weighted sum of single-variant chi-squared statistics (SKAT gene-based test).  To instead use weighted ACAT to combine single-variant p-values, specify `--acat`.
+- **Variant Aggregation Methods.** By default, GAMBIT aggregates test statistics across variants using a weighted sum of single-variant chi-squared statistics (SKAT gene-based test).  To instead use weighted ACAT or HMP to combine single-variant p-values, specify `--no-skat` and a p-value combination method via `--pcomb`.
 
 #### TWAS Analysis
 - To compute TWAS/PrediXcan gene-based tests using GAMBIT, specify an eWeight file via `--eweights my_eWeights.txt.gz`, formatted
@@ -73,11 +72,11 @@ UTR       UTR5              Utr5
 
 - The `BETAS` field format is `eGene_A=Weight_A1@Tissue_A1;Weight_A2@Tissue_A2|eGene_B=Weight_B1@Tissue_B1`, and labels for tissue IDs can be specified in the header. 
 - **Subsetting tissues.** To restrict analysis to a subset of tissues/cell-types, specify a comma-separated list of tissues following the `--tissues` flag. By default, GAMBIT includes all tissues/cell-types present in the eWeight file. 
-- **Tissue Aggregation for Omnibus tests.** GAMBIT reports both single-tissue TWAS/PrediXcan analysis results, and omnibus tests results aggregating across all specified tissues/cell-types for each eGene. Omnibus p-values for multi-tissue TWAS/PrediXcan analysis can be calculated in GAMBIT using either 1) the maximum single-tissue test statistic based on the joint distribution of single-tissue statistics, 2) the sum of squared single-tissue z-scores (analogous to SKAT), or 3) ACAT [default]. Omnibus test method for multi-tissue analysis can be specified via `--tissue-aggreg` (`ACAT`, `MinP`, `SKAT`, or `ALL`).
+- **Tissue Aggregation for Omnibus tests.** GAMBIT reports both single-tissue TWAS/PrediXcan analysis results, and omnibus tests results aggregating across all specified tissues/cell-types for each eGene. Omnibus p-values for multi-tissue TWAS/PrediXcan analysis can be calculated in GAMBIT using either 1) the maximum single-tissue test statistic based on the joint distribution of single-tissue statistics, 2) the sum of squared single-tissue z-scores (analogous to SKAT), or 3) PCOMB for ACAT or HMP [default]. Omnibus test method for multi-tissue analysis can be specified via `--tissue-aggreg` (`PCOMB`, `MinP`, `SKAT`, or `ALL`). P-value combination method can be specified via `--pcomb` (`ACAT` or `HMP`).
 - **Single-tissue and omnibus test output.** Gene-based tests and p-values for each eGene-tissue pair are reported in `*.stratified_out.txt` files, and omnibus p-values (aggregating across all tissues for each eGene) in `*.summary_out.txt` files.
 
 #### dTSS-Weighted Gene-Based Tests
-- To incorporate un-annotated regulatory variants in gene-based analysis, GAMBIT implements a dTSS (distance to Transcription Start Site) weighted gene-based test, which aggregates all single-variant p-values within a specified window from each gene's TSS using ACAT and assigns higher weight to variants nearer the TSS using an exponential decay function. 
+- To incorporate un-annotated regulatory variants in gene-based analysis, GAMBIT implements a dTSS (distance to Transcription Start Site) weighted gene-based test, which aggregates all single-variant p-values within a specified window from each gene's TSS using weighted ACAT or HMP and assigns higher weight to variants nearer the TSS using an exponential decay function. 
 - To compute dTSS-weighted gene-based tests, specify a TSS bed file via `--tss-bed my_tss_bed.bed.gz`, fomatted 
 
 ```

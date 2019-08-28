@@ -20,9 +20,10 @@ void print_usage() {
 	cerr << "      --ldref-only : only retain variants with complete LD information\n";
 	cerr << "      --tissues STR : only use eSNPs from tissues listed in file\n";
 	cerr << "    test statistics\n";
+	cerr << "      --pcomb : p-value combination method (\"ACAT\" or \"HMP\") \n";
 	cerr << "      --tss-alpha : alpha values (comma-separated) for dTSS weights \n";
-	cerr << "      --acat : use ACAT rather than SKAT for regulatory elements & exons\n";
-	cerr << "      --tissue-aggreg [ACAT] : method to aggregate eSNP tests across tissues (\"ACAT\", \"MinP\", \"SKAT\", or \"All\") \n";
+	cerr << "      --no-skat : use ACAT or HMP rather than SKAT for regulatory elements & exons\n";
+	cerr << "      --tissue-aggreg: method to aggregate eSNP tests across tissues (\"PCOMB\" for ACAT/HMP (default), \"MaxZsq\", \"SKAT\", or \"All\") \n";
 	cerr << "      --tissues STR : only use eSNPs from listed tissues (comma-separated list or file)\n";
 	cerr << "    output\n";
 	cerr << "      --region STR : restrict analysis to specified region \n";
@@ -74,7 +75,9 @@ int main (int argc, char *argv[]) {
 	
 	char default_test = 'Q'; // default is 'Q' (SKAT)
 	
-	int cauchy_no_skat = 0;
+	int pcomb_no_skat = 0;
+	
+	string PCOMB_METHOD = "HMP";
 	
 	string TSS_VERBOSITY_PVAL_STR = "";
 	double TSS_VERBOSITY_PVAL = 1.00;
@@ -93,6 +96,7 @@ int main (int argc, char *argv[]) {
 		{"no-memo", no_argument, &no_memo_LD, 1},
 		{"preload", no_argument, &preload_LD, 1},
 		{"ldref",      required_argument,  0,  'l'},
+		{"pcomb",      required_argument,  0,  'z'},
 		{"gwas", required_argument, 0, 'g'},
 		{"anno-defs", required_argument, 0, 'a'},
 		{"defs", required_argument, 0, 'a'},
@@ -107,7 +111,7 @@ int main (int argc, char *argv[]) {
 		{"merge-tissues", no_argument, &tmerge, 1},
 		{"tissue-aggreg", required_argument, 0, 'm'},
 		{"debug", no_argument, &debug_mode, 1},
-		{"acat", no_argument, &cauchy_no_skat, 1},
+		{"no-skat", no_argument, &pcomb_no_skat, 1},
 		{"stdout", no_argument, &print_screen, 1},
 		{"bayes", no_argument, &bayes, 1},
 		{"region",    required_argument, 0,  'r' },
@@ -118,7 +122,7 @@ int main (int argc, char *argv[]) {
 		{0, 0, 0, 0}
 	};
 	int long_index =0;
-	while ((opt = getopt_long(argc,argv,"l:g:a:f:s:x:y:e:j:t:b:m:r:p:v:",long_options,&long_index)) != -1) {
+	while ((opt = getopt_long(argc,argv,"l:g:a:f:s:x:y:z:e:j:t:b:m:r:p:v:",long_options,&long_index)) != -1) {
 		switch (opt) {
 			case 'f' : afile = optarg;
 				break;
@@ -141,6 +145,8 @@ int main (int argc, char *argv[]) {
 			case 'x' : TSS_ALPHA_STR = optarg;
 				break;
 			case 'y' : TSS_WINDOW_STR = optarg;
+				break;
+			case 'z' : PCOMB_METHOD = optarg;
 				break;
 			case 'e' : TSS_VERBOSITY_PVAL_STR = optarg;
 				break;
@@ -226,6 +232,8 @@ int main (int argc, char *argv[]) {
 		setPreload(false);
 	}
 	
+	setCombPvalMethod(PCOMB_METHOD);
+	
 	setMultiForm(multi_test_type);
 	
 	if( JUMP_DIST_STR != "" ){
@@ -244,8 +252,8 @@ int main (int argc, char *argv[]) {
 
 	initCHR();
 	
-	if( cauchy_no_skat ){
-		default_test = 'C'; // rather than SKAT, using Cauchy/ACAT test (no LD)
+	if( pcomb_no_skat ){
+		default_test = 'C'; // rather than SKAT, using ACAT/HMP test (no LD)
 	}
 	
 	if( TSS_VERBOSITY_PVAL_STR != "" ){

@@ -1,7 +1,7 @@
 VERSION=0.3
 
 CPPFLAGS= -Ofast -flto -pipe -I$(cdir)/src/htslib -I$(cdir)/src/cdflib -I$(cdir)/src/tabixpp -L$(cdir)/src/htslib -L$(cdir)/src/cdflib -L$(cdir)/src/tabixpp 
-CXXFLAGS= -std=c++11 -DNDEBUG 
+CXXFLAGS= -std=c++11 
 FFLAGS=
 LDFLAGS= -lz -lm
 

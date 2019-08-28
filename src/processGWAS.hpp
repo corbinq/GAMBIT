@@ -279,6 +279,7 @@ void setWindowSizeTSS(int);
 void setVerbosityTSS(double);
 void setMultiForm(string);
 
+void setCombPvalMethod(string);
 
 bool read_snp_info(string &file_path, snpinfo &sinfo);
 
